@@ -68,6 +68,7 @@ def greeks(S,K,T,r,sigma,q=0,otype="call"):
     r = float(r)
     sigma = float(sigma)
     q = float(q)
+    Greek = list()
     Delta_func = grad(black_scholes,argnums=0)
     Gamma_func = grad(Delta_func,argnums=0)
     Theta_func = grad(black_scholes,argnums=2)
@@ -78,7 +79,12 @@ def greeks(S,K,T,r,sigma,q=0,otype="call"):
     Theta = -Theta_func(S,K,T,r,sigma,q,otype)
     Vega = Vega_func(S,K,T,r,sigma,q,otype)
     Rho = Rho_func(S,K,T,r,sigma,q,otype)
-    return Delta, Gamma, Theta, Vega, Rho
+    Greek.append(jnp.asarray(Delta).item(0))
+    Greek.append(jnp.asarray(Gamma).item(0))
+    Greek.append(jnp.asarray(Theta).item(0))
+    Greek.append(jnp.asarray(Vega).item(0))
+    Greek.append(jnp.asarray(Rho).item(0))
+    return Greek
 
 def price_heatmap(S,K,T=1,r=0.03,sigma=0.1,q=0,otype="call",Pur_Price=0,grid=9,diff=0.2):
     interval = (2*diff) / (grid-1)
