@@ -18,7 +18,8 @@ def data_fetcher(tickers):
     data.columns = names
     return data
 
-stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN','BRK-B']
+stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
+                 'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC']
 data = data_fetcher(stock_tickers)
 
 def heatmap(tickers):
@@ -30,7 +31,7 @@ def heatmap(tickers):
     plt.close()
     return d
 
-def coint_tester(tickers,corr_threshold=0.9,Output_adfuller="All",stat_significant=0.05):
+def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significant=0.05):
     data = data_fetcher(tickers)
     corr_matrix = data.corr()
     pairs = list(combinations(tickers, 2))
@@ -46,7 +47,7 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller="All",stat_significa
             p_value_S = adfuller(spread)[1]
             p_value_R = adfuller(ratio)[1]
 
-            if Output_adfuller == "All":
+            if Output_adfuller == False:
                 print(f"\nPair: {stock1} & {stock2}")
                 print(f"Correlation: {corr:.2f}")
                 print(f"p-value for spread: {p_value_S:.4f}")
