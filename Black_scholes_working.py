@@ -30,17 +30,16 @@ def stock_data(stock):
     return S
 
 def get_riskfree_rate():
-    r_data = yf.Ticker("^IRX")
-    r_df = r_data.history(period="5d")
+    r_df = yf.Ticker("^IRX").history(period="5d")
     if r_df.empty:
         raise ValueError("No data returned for ^IRX. Check internet connection or ticker.")
-    else:
-        r = r_df['Close'].iloc[-1] / 100
-        return r
-
+    y = r_df["Close"].iloc[-1] / 100
+    T = 13 / 52
+    r = -jnp.log(1 - T * y) / T
+    return float(r)
 
 def diff_function(S,K,T,r,sigma_est,price,q=0,otype="call"):
-    theoretical = black_scholes(S,K,T,r,sigma_est,q)
+    theoretical = black_scholes(S,K,T,r,sigma_est,q,otype)
     return theoretical - price
 
 def implied_volatility(stock,K,sigma_est,price,T=1,q=0,otype="call",E=0.01,iter=40):
@@ -76,7 +75,7 @@ def greeks(S,K,T,r,sigma,q=0,otype="call"):
     Rho_func = grad(black_scholes,argnums=3)
     Delta = Delta_func(S,K,T,r,sigma,q,otype)
     Gamma = Gamma_func(S,K,T,r,sigma,q,otype)
-    Theta = Theta_func(S,K,T,r,sigma,q,otype)
+    Theta = -Theta_func(S,K,T,r,sigma,q,otype)
     Vega = Vega_func(S,K,T,r,sigma,q,otype)
     Rho = Rho_func(S,K,T,r,sigma,q,otype)
     return Delta, Gamma, Theta, Vega, Rho
@@ -143,9 +142,9 @@ def skew_surface(ticker,otype="call"):
     stock_price = stock_data(ticker)
     filtered = options_df[options_df['otype'] == otype].copy()
     filtered = filtered.dropna(subset=['impliedVolatility'])
-    K = filtered['strike'].values/stock_price
-    T = filtered['T'].values
-    IV = filtered['impliedVolatility'].values
+    K = jnp.asarray(filtered['strike'] / stock_price)
+    T = jnp.asarray(filtered['T'])
+    IV = jnp.asarray(filtered['impliedVolatility'])
     T_grid, K_grid = jnp.meshgrid(
         jnp.linspace(min(T), max(T), 50),
         jnp.linspace(min(K), max(K), 50)
