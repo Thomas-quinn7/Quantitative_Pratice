@@ -35,7 +35,7 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
     data = data_fetcher(tickers)
     corr_matrix = data.corr()
     pairs = list(combinations(tickers, 2))
-    all_pairs = list()
+    results_list=[]
 
     for stock1, stock2 in pairs:
         corr = corr_matrix.loc[stock1, stock2]
@@ -52,16 +52,17 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
                 print(f"Correlation: {corr:.2f}")
                 print(f"p-value for spread: {p_value_S:.4f}")
                 print(f"p-value for ratio: {p_value_R:.4f}")
-                pasted_test = [stock1, stock2, p_value_S, p_value_R]
-                all_pairs.append(pasted_test)
+                results_list.append([stock1,stock2,p_value_S,p_value_R])
             else:
                 if p_value_S < stat_significant or p_value_R < stat_significant:
                     print(f"\nPair: {stock1} & {stock2}")
                     print(f"Correlation: {corr:.2f}")
                     print(f"p-value for spread: {p_value_S:.4f}")
                     print(f"p-value for ratio: {p_value_R:.4f}")
-                    pasted_test = [stock1, stock2, p_value_S, p_value_R]
-                    all_pairs.append(pasted_test)
+                    results_list.append([stock1,stock2,p_value_S,p_value_R])
+    all_pairs = pd.DataFrame(results_list,columns=
+                             ['stock1', 'stock2', 'p_value_S', 'p_value_R'])
     return all_pairs
 
-a=coint_tester(stock_tickers,Output_adfuller=1)
+a=coint_tester(stock_tickers)
+print(a)
