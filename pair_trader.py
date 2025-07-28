@@ -61,7 +61,7 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
                     print(f"p-value for ratio: {p_value_R:.4f}")
                     results_list.append([stock1,stock2,p_value_S,p_value_R])
     all_pairs = pd.DataFrame(results_list,columns=
-                             ['stock1', 'stock2', 'p_value_S', 'p_value_R'])
+                             ['Stock 1', 'Stock 2', 'p_value for Spread', 'p_value for Ratio'])
     return all_pairs
 
 a=coint_tester(stock_tickers)
