@@ -65,4 +65,38 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
     return all_pairs
 
 a=coint_tester(stock_tickers)
-print(a)
+print(len(a))
+b=yf.Ticker(a.iloc[2].iloc[0])
+hist_data = b.history(period='1y')
+print(hist_data)
+
+def strat_stats(tickers,item=0,stat_sig=0.05):
+    n1=a.iloc[item].iloc[0]
+    n2=a.iloc[item].iloc[1]
+    s1=data_fetcher(n1)
+    s2=data_fetcher(n2)
+    if a.iloc[item].iloc[3]<0.05:
+        ratio = s1/s2
+        z_score = (ratio-ratio.mean())/(ratio.std())
+        try:
+            mean_val = z_score.mean().item()
+        except ValueError:
+            # If .item() fails, try other approaches
+            mean_val = float(z_score.mean().iloc[0]) if hasattr(z_score.mean(), 'iloc') else float(z_score.mean())
+
+        plt.figure(figsize=(8,6),dpi=200)
+        plt.plot(ratio.index,z_score.values,label="z scores")
+        plt.axhline(mean_val,color="black")
+        plt.axhline(1,color="red")
+        plt.axhline(1.25,color="red")
+        plt.axhline(-1,color="green")
+        plt.axhline(-1.25,color="green")
+        plt.legend(loc="best")
+        plt.title(f"Ratio between {n1} and {n2}")
+        plt.show()
+        None
+
+    else:
+        None
+
+strat_stats(a)    
