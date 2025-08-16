@@ -345,11 +345,9 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     signals['ratio'] = ratio
     signals['ratio_returns'] = ratio.pct_change()
     
-
     signals['position_change'] = signals['position'].diff().fillna(0)
     signals['trade_occurred'] = (signals['position_change'] != 0).astype(int)
     
-
     signals['transaction_costs'] = signals['trade_occurred'] * transaction_cost * 2  
     
     signals['gross_strategy_returns'] = signals['position'].shift(1) * signals['ratio_returns']
@@ -407,13 +405,7 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     print(f"  - Max Drawdown: {gross_max_dd:.2f}% → {net_max_dd:.2f}%"f"  - Number of Trades: {num_trades}")
     print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
     print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
-    print(f"\nPerformance Metrics (Gross vs Net):")
-    print(f"  - Total Return: {gross_total_return:.2f}% → {net_total_return:.2f}%")
-    print(f"  - Annualized Return: {gross_annual_return:.2f}% → {net_annual_return:.2f}%")
-    print(f"  - Volatility: {gross_volatility:.2f}% → {net_volatility:.2f}%")
-    print(f"  - Sharpe Ratio: {gross_sharpe_ratio:.2f} → {net_sharpe_ratio:.2f}")
-    print(f"  - Max Drawdown: {gross_max_dd:.2f}% → {net_max_dd:.2f}%")
-    
+
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     
     ax1.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
@@ -480,7 +472,8 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
 
 if __name__ == "__main__":
     stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
-                     'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC']
+                     'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
+                     'A5G.IR','BIRG.IR','KRZ.IR']
     
     pairs = coint_tester(stock_tickers)
     print(f"Found {len(pairs)} cointegrated pairs")
