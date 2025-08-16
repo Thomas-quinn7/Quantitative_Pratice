@@ -77,11 +77,11 @@ def strat_stats(pairs_df,item=0,stat_sig=0.05):
         print("No cointegration found")
         return
 
-    n1=a.iloc[item].iloc[0]
-    n2=a.iloc[item].iloc[1]
+    n1=pairs_df.iloc[item].iloc[0]
+    n2=pairs_df.iloc[item].iloc[1]
     s1=data_fetcher(n1)
     s2=data_fetcher(n2)
-    if a.iloc[item].iloc[3]<stat_sig:
+    if pairs_df.iloc[item].iloc[3]<stat_sig:
         common_dates = s1.index.intersection(s2.index)
         s1_aligned = s1.loc[common_dates, n1]
         s2_aligned = s2.loc[common_dates, n2]
