@@ -119,7 +119,8 @@ def strat_stats(pairs_df,item=0,stat_sig=0.05):
 
 def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15, 
                           z_entry=0.5, z_exit=0.1, initial_capital=10000, 
-                          transaction_cost=0.001, stop_loss_z=3.0, stop_loss_ratio=0.1):
+                          transaction_cost=0.001, stop_loss_z=3.0, stop_loss_ratio=0.1,
+                          Performance="Y", Graphs="Y"):
     """
     Parameters:
     - pairs_df: DataFrame with cointegrated pairs
@@ -190,9 +191,6 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
 
         ma_diverging_up = current_ma_short > current_ma_long and (current_ma_short - current_ma_long) > (prev_ma_short - prev_ma_long)
         ma_diverging_down = current_ma_short < current_ma_long and (current_ma_short - current_ma_long) < (prev_ma_short - prev_ma_long)
-        
-        z_momentum_down = (current_z < prev_z) and (current_z < -z_entry*0.7)
-        z_momentum_up = (current_z > prev_z) and (current_z > z_entry*0.7)
         
         stop_loss_hit = False
         
@@ -382,78 +380,80 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     total_transaction_costs = signals['transaction_costs'].sum() * initial_capital
     cost_impact = (gross_total_return - net_total_return)
     
-    print(f"\n=== Moving Average Strategy Results for {n1}/{n2} ===")
-    print(f"Strategy Parameters:")
-    print(f"  - Short MA: {ma_short} days")
-    print(f"  - Long MA: {ma_long} days") 
-    print(f"  - Entry Z-Score: ±{z_entry}")
-    print(f"  - Exit Z-Score: ±{z_exit}")
-    print(f"  - Stop Loss Z-Score: ±{stop_loss_z}")
-    print(f"  - Stop Loss Ratio: {stop_loss_ratio*100:.1f}%")
-    print(f"  - Transaction Cost: {transaction_cost*100:.2f}% per trade")
-    print(f"\nTrading Activity:")
-    print(f"  - Total Trades: {num_trades}")
-    print(f"  - Stop Loss Exits: {num_stop_losses} ({num_stop_losses/num_trades*100:.1f}% of trades)")
-    print(f"  - Normal Exits: {num_trades - num_stop_losses}")
-    print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
-    print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
-    print(f"\nPerformance Metrics (Gross vs Net):")
-    print(f"  - Total Return: {gross_total_return:.2f}% → {net_total_return:.2f}%")
-    print(f"  - Annualized Return: {gross_annual_return:.2f}% → {net_annual_return:.2f}%")
-    print(f"  - Volatility: {gross_volatility:.2f}% → {net_volatility:.2f}%")
-    print(f"  - Sharpe Ratio: {gross_sharpe_ratio:.2f} → {net_sharpe_ratio:.2f}")
-    print(f"  - Max Drawdown: {gross_max_dd:.2f}% → {net_max_dd:.2f}%")
-    print(f"  - Number of Trades: {num_trades}")      
-    print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
-    print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
+    if Performance=="Y":
+        print(f"\n=== Moving Average Strategy Results for {n1}/{n2} ===")
+        print(f"Strategy Parameters:")
+        print(f"  - Short MA: {ma_short} days")
+        print(f"  - Long MA: {ma_long} days") 
+        print(f"  - Entry Z-Score: ±{z_entry}")
+        print(f"  - Exit Z-Score: ±{z_exit}")
+        print(f"  - Stop Loss Z-Score: ±{stop_loss_z}")
+        print(f"  - Stop Loss Ratio: {stop_loss_ratio*100:.1f}%")
+        print(f"  - Transaction Cost: {transaction_cost*100:.2f}% per trade")
+        print(f"\nTrading Activity:")
+        print(f"  - Total Trades: {num_trades}")
+        print(f"  - Stop Loss Exits: {num_stop_losses} ({num_stop_losses/num_trades*100:.1f}% of trades)")
+        print(f"  - Normal Exits: {num_trades - num_stop_losses}")
+        print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
+        print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
+        print(f"\nPerformance Metrics (Gross vs Net):")
+        print(f"  - Total Return: {gross_total_return:.2f}% → {net_total_return:.2f}%")
+        print(f"  - Annualised Return: {gross_annual_return:.2f}% → {net_annual_return:.2f}%")
+        print(f"  - Volatility: {gross_volatility:.2f}% → {net_volatility:.2f}%")
+        print(f"  - Sharpe Ratio: {gross_sharpe_ratio:.2f} → {net_sharpe_ratio:.2f}")
+        print(f"  - Max Drawdown: {gross_max_dd:.2f}% → {net_max_dd:.2f}%")
+        print(f"  - Number of Trades: {num_trades}")      
+        print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
+        print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
 
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
+    if Graphs=="Y":
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     
-    ax1.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
-    ax1.plot(signals.index, signals['ma_short'], label=f'MA {ma_short}', linewidth=2)
-    ax1.plot(signals.index, signals['ma_long'], label=f'MA {ma_long}', linewidth=2)
-    ax1.axhline(z_entry, color='red', linestyle='--', alpha=0.7)
-    ax1.axhline(-z_entry, color='green', linestyle='--', alpha=0.7)
-    ax1.axhline(z_exit, color='orange', linestyle=':', alpha=0.7)
-    ax1.axhline(-z_exit, color='orange', linestyle=':', alpha=0.7)
-    ax1.axhline(0, color='black', linestyle='-', alpha=0.5)
-    ax1.set_title(f'Z-Score and Moving Averages: {n1}/{n2}')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+        ax1.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
+        ax1.plot(signals.index, signals['ma_short'], label=f'MA {ma_short}', linewidth=2)
+        ax1.plot(signals.index, signals['ma_long'], label=f'MA {ma_long}', linewidth=2)
+        ax1.axhline(z_entry, color='red', linestyle='--', alpha=0.7)
+        ax1.axhline(-z_entry, color='green', linestyle='--', alpha=0.7)
+        ax1.axhline(z_exit, color='orange', linestyle=':', alpha=0.7)
+        ax1.axhline(-z_exit, color='orange', linestyle=':', alpha=0.7)
+        ax1.axhline(0, color='black', linestyle='-', alpha=0.5)
+        ax1.set_title(f'Z-Score and Moving Averages: {n1}/{n2}')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
 
-    buy_signals = signals[signals['signal'] == 1]
-    sell_signals = signals[signals['signal'] == -1]
+        buy_signals = signals[signals['signal'] == 1]
+        sell_signals = signals[signals['signal'] == -1]
     
-    ax2.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
-    ax2.scatter(buy_signals.index, buy_signals['z_score'], color='green', 
+        ax2.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
+        ax2.scatter(buy_signals.index, buy_signals['z_score'], color='green', 
                marker='^', s=100, label='Buy Signal', zorder=5)
-    ax2.scatter(sell_signals.index, sell_signals['z_score'], color='red',
+        ax2.scatter(sell_signals.index, sell_signals['z_score'], color='red',
                marker='v', s=100, label='Sell Signal', zorder=5)
-    ax2.axhline(0, color='black', linestyle='-', alpha=0.5)
-    ax2.set_title('Trading Signals')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+        ax2.axhline(0, color='black', linestyle='-', alpha=0.5)
+        ax2.set_title('Trading Signals')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
 
-    ax3.plot(signals.index, signals['gross_portfolio_value'], linewidth=2, 
+        ax3.plot(signals.index, signals['gross_portfolio_value'], linewidth=2, 
              color='blue', label='Gross Returns', alpha=0.8)
-    ax3.plot(signals.index, signals['net_portfolio_value'], linewidth=2, 
+        ax3.plot(signals.index, signals['net_portfolio_value'], linewidth=2, 
              color='red', label='Net Returns (After Costs)', alpha=0.8)
-    ax3.axhline(initial_capital, color='black', linestyle='--', alpha=0.7, label='Initial Capital')
-    ax3.set_title('Portfolio Value: Gross vs Net Returns')
-    ax3.set_ylabel('Portfolio Value ($)')
-    ax3.legend()
-    ax3.grid(True, alpha=0.3)
+        ax3.axhline(initial_capital, color='black', linestyle='--', alpha=0.7, label='Initial Capital')
+        ax3.set_title('Portfolio Value: Gross vs Net Returns')
+        ax3.set_ylabel('Portfolio Value ($)')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
 
-    cumulative_costs = (signals['transaction_costs'] * initial_capital).cumsum()
-    ax4.plot(signals.index, cumulative_costs, linewidth=2, color='purple', label='Cumulative Transaction Costs')
-    ax4.fill_between(signals.index, cumulative_costs, alpha=0.3, color='purple')
-    ax4.set_title('Cumulative Transaction Costs Over Time')
-    ax4.set_ylabel('Cumulative Costs ($)')
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
+        cumulative_costs = (signals['transaction_costs'] * initial_capital).cumsum()
+        ax4.plot(signals.index, cumulative_costs, linewidth=2, color='purple', label='Cumulative Transaction Costs')
+        ax4.fill_between(signals.index, cumulative_costs, alpha=0.3, color='purple')
+        ax4.set_title('Cumulative Transaction Costs Over Time')
+        ax4.set_ylabel('Cumulative Costs ($)')
+        ax4.legend()
+        ax4.grid(True, alpha=0.3)
     
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
     
     return signals, {
         'gross_total_return': gross_total_return,
@@ -471,7 +471,96 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         'cost_impact': cost_impact
     }
 
-if __name__ == "__main__":
+
+
+def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net_sharpe_ratio'):
+    print(f"Debug: pairs_df length = {len(pairs_df)}")
+    print(f"Debug: pair_index = {pair_index}")
+    print(f"Debug: optimisation_metric = {optimisation_metric}")
+    if params is None:
+        params= {
+            'ma_short' : [3, 5, 7, 10],
+            'ma_long' : [10, 15, 20, 30],
+            'exit_z': [0, 0.05, 0.1, 0.25],
+            'entry_z': [0.5, 0.75, 1, 1.5]
+        }
+
+        best_result = None
+        best_score = -float('inf')
+
+        for Short in params['ma_short']:
+            for Long in params['ma_long']:
+                if Long <= Short:
+                    continue
+                for Exit in params['exit_z']:
+                    for Entry in params['entry_z']:
+                        if Entry <= Exit:
+                            continue
+                        try:
+                            signals, performance = moving_average_strategy(
+                                pairs_df, item = pair_index, 
+                                ma_short = Short,
+                                ma_long = Long,
+                                z_entry = Entry,
+                                z_exit = Exit,
+                                Performance="N",
+                                Graphs="N"
+                            )
+
+                            if optimisation_metric == 'net_sharpe_ratio':
+                                score = performance['net_sharpe_ratio']
+                            elif optimisation_metric == 'net_total_return':
+                                score = performance['net_total_return']
+                            elif optimisation_metric == 'net_annual_return':
+                                score = performance['net_annual_return']
+                            elif optimisation_metric == 'return_to_drawdown':
+                                if performance['net_max_drawdown'] != 0:
+                                    score = performance['net_total_return'] / abs(performance['net_max_drawdown'])
+                                else:
+                                    score = performance['net_total_return']
+                            elif optimisation_metric == 'profit_factor':
+                                trades = signals[signals['signal'] != 0]
+                                if len(trades) > 0:
+                                    returns = signals['net_strategy_returns']
+                                    gross_profit = returns[returns > 0].sum()
+                                    gross_loss = abs(returns[returns < 0].sum())
+                                    score = gross_profit / gross_loss if gross_loss > 0 else gross_profit
+                                else:
+                                    score = 0
+                            else:
+                                raise ValueError(f"Unknown optimiation metric: {optimisation_metric}")
+                            
+                            if score > best_score:
+                                best_score = score
+                                best_result = {
+                                    'ma_short': Short,
+                                    'ma_long': Long,
+                                    'z_entry': Entry,
+                                    'z_exit': Exit,
+                                    'performance': performance,
+                                    'optimisation_score':score,
+                                    'optimisated metric': optimisation_metric
+                                }
+                        except:
+                            continue
+    
+    if best_result:
+        print(f"Best parameters found (optimised for {optimisation_metric}):")
+        print(f"  MA Short: {best_result['ma_short']}")
+        print(f"  MA Long: {best_result['ma_long']}")
+        print(f"  Z Entry: {best_result['z_entry']}")
+        print(f"  Z Exit: {best_result['z_exit']}")
+        print(f"  {optimisation_metric}: {best_result['optimisation_score']:.3f}")
+        print(f"  Net Total Return: {best_result['performance']['net_total_return']:.2f}%")
+        print(f"  Net Sharpe Ratio: {best_result['performance']['net_sharpe_ratio']:.3f}")
+        print(f"  Max Drawdown: {best_result['performance']['net_max_drawdown']:.2f}%")
+    
+    return best_result
+
+
+
+
+#if __name__ == "__main__":
     stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
                      'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
                      'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR']
@@ -494,3 +583,81 @@ if __name__ == "__main__":
         trades = signals[signals['signal'] != 0][['z_score', 'signal', 'trade_reason']].head(10)
         print(f"\nFirst 10 Trades:")
         print(trades)
+
+
+if __name__ == "__main__":
+    stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
+                     'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
+                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR']
+    
+    pairs = coint_tester(stock_tickers)
+    print(f"Found {len(pairs)} cointegrated pairs")
+    all_results=[]
+    if len(pairs) > 0:
+        for i in range(len(pairs)):
+            pair_info = pairs.iloc[i]
+            try:
+                signals, performance = moving_average_strategy(
+                    pairs, 
+                    item=i,                   
+                    ma_short=5,                
+                    ma_long=15,                
+                    z_entry=0.5,              
+                    z_exit=0.1,               
+                    initial_capital=10000,
+                    transaction_cost=0.001    
+                )
+                if signals is not None and performance is not None:
+                    result = {
+                        'pair_index': i,
+                        'stock1': pair_info['s1'],
+                        'stock2': pair_info['s2'],
+                        'p_value_spread': pair_info['pvs'],
+                        'p_value_ratio': pair_info['pvr'],
+                        'signals': signals,
+                        'performance': performance,
+                        'success': True
+                    }
+                    all_results.append(result)
+            except Exception as e:
+                print(f"Error analysising pair {pair_info["s1"]}/{pair_info["s2"]}:{str(e)}")
+                all_results.append({
+                    'pair_index': i,
+                    'stock1': pair_info['s1'],
+                    'stock2': pair_info['s2'],
+                    'success': False,
+                    'Error': str(e)
+                })
+
+    successful_results = [r for r in all_results if r.get('success', False)]
+    if len(successful_results)>0:
+        summary_data=[]
+        for result in successful_results:
+            perf = result['performance']
+            summary_data.append({
+                'Pair': f"{result['stock1']}/{result['stock2']}",
+                'Net Return (%)': perf['net_total_return'],
+                'Net Annual (%)': perf['net_annual_return'],
+                'Net Sharpe': perf['net_sharpe_ratio'],
+                'Max Drawdown (%)': perf['net_max_drawdown'],
+                'Num Trades': perf['num_trades'],
+                'Total Costs ($)': perf['total_transaction_costs'],
+                'Volatility (%)': perf['net_volatility']
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        summary_df = summary_df.sort_values('Net Return (%)', ascending=False)
+
+        print("\nAll successful strategies by Net returns(%) :")
+        print(summary_df.to_string(index=False, float_format='%.2f'))
+
+        best_return = summary_df.iloc[0]
+        best_sharpe = summary_df.iloc[summary_df['Net Sharpe'].idxmax()]
+        best_risk_adj = summary_df.iloc[(summary_df['Net Return (%)'] / summary_df['Max Drawdown (%)'].abs()).idxmax()]
+        risk_adj_ratio = best_risk_adj['Net Return (%)'] / abs(best_risk_adj['Max Drawdown (%)'])
+
+        print(f"\nBest net Return {best_return['Pair']}({best_return['Net Return (%)']:.2f}%)")
+        print(f"Best Sharpe ratio {best_sharpe['Pair']}({best_sharpe['Net Sharpe']:.2f})")
+        print(f"Best Risk-Adjusted: {best_risk_adj['Pair']} (Return/MaxDD: {risk_adj_ratio:.2f})")
+    optimised_return=optimisation_parms(pairs, 0)
+    print(optimised_return)
