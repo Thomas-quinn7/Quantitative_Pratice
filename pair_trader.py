@@ -25,7 +25,6 @@ def data_fetcher(tickers):
 
 stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
                  'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC']
-data = data_fetcher(stock_tickers)
 
 def heatmap(tickers):
     d=data_fetcher(tickers)
@@ -57,18 +56,17 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
                 print(f"Correlation: {corr:.2f}")
                 print(f"p-value for spread: {p_value_S:.4f}")
                 print(f"p-value for ratio: {p_value_R:.4f}")
-                results_list.append([stock1,stock2,p_value_S,p_value_R])
+                results_list.append([stock1,stock2,p_value_S,p_value_R,data[stock1],data[stock2]])
             else:
                 if p_value_S < stat_significant or p_value_R < stat_significant:
                     print(f"\nPair: {stock1} & {stock2}")
                     print(f"Correlation: {corr:.2f}")
                     print(f"p-value for spread: {p_value_S:.4f}")
                     print(f"p-value for ratio: {p_value_R:.4f}")
-                    results_list.append([stock1,stock2,p_value_S,p_value_R])
+                    results_list.append([stock1,stock2,p_value_S,p_value_R,data[stock1],data[stock2]])
     all_pairs = pd.DataFrame(results_list,columns=
-                             ['s1', 's2', 'pvs', 'pvr'])
+                             ['s1', 's2', 'pvs', 'pvr','stock_1_data','stock_2_data'])
     return all_pairs
-
 
 def strat_stats(pairs_df,item=0,stat_sig=0.05):
     """This function is the base function to understand 
@@ -139,14 +137,14 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         print("No pairs found to analyze")
         return None
         
-    n1 = pairs_df.iloc[item].iloc[0]
-    n2 = pairs_df.iloc[item].iloc[1]
-    s1 = data_fetcher([n1])
-    s2 = data_fetcher([n2])
+    n1 = pairs_df.iloc[item]['s1']
+    n2 = pairs_df.iloc[item]['s2']
+    s1 = pairs_df.iloc[item]['stock_1_data']
+    s2 = pairs_df.iloc[item]['stock_2_data']
 
     common_dates = s1.index.intersection(s2.index)
-    s1_aligned = s1.loc[common_dates, n1]
-    s2_aligned = s2.loc[common_dates, n2]
+    s1_aligned = s1.loc[common_dates]
+    s2_aligned = s2.loc[common_dates]
 
     ratio = s1_aligned / s2_aligned
     ratio.dropna(inplace=True)
@@ -474,9 +472,6 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
 
 
 def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net_sharpe_ratio'):
-    print(f"Debug: pairs_df length = {len(pairs_df)}")
-    print(f"Debug: pair_index = {pair_index}")
-    print(f"Debug: optimisation_metric = {optimisation_metric}")
     if params is None:
         params= {
             'ma_short' : [3, 5, 7, 10],
@@ -559,32 +554,6 @@ def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net
 
 
 
-
-#if __name__ == "__main__":
-    stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
-                     'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
-                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR']
-    
-    pairs = coint_tester(stock_tickers)
-    print(f"Found {len(pairs)} cointegrated pairs")
-    
-    if len(pairs) > 0:
-        signals, performance = moving_average_strategy(
-            pairs, 
-            item=3,                   
-            ma_short=5,                
-            ma_long=15,                
-            z_entry=0.5,              
-            z_exit=0.1,               
-            initial_capital=10000,
-            transaction_cost=0.001    
-        )
-
-        trades = signals[signals['signal'] != 0][['z_score', 'signal', 'trade_reason']].head(10)
-        print(f"\nFirst 10 Trades:")
-        print(trades)
-
-
 if __name__ == "__main__":
     stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
                      'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
@@ -659,5 +628,4 @@ if __name__ == "__main__":
         print(f"\nBest net Return {best_return['Pair']}({best_return['Net Return (%)']:.2f}%)")
         print(f"Best Sharpe ratio {best_sharpe['Pair']}({best_sharpe['Net Sharpe']:.2f})")
         print(f"Best Risk-Adjusted: {best_risk_adj['Pair']} (Return/MaxDD: {risk_adj_ratio:.2f})")
-    optimised_return=optimisation_parms(pairs, 0)
-    print(optimised_return)
+    optimisation_parms(pairs, 1)
