@@ -23,9 +23,6 @@ def data_fetcher(tickers):
     data.columns = names
     return data
 
-stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
-                 'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC']
-
 def heatmap(tickers):
     d=data_fetcher(tickers)
     corr_matrix = d.corr()
@@ -117,7 +114,7 @@ def strat_stats(pairs_df,item=0,stat_sig=0.05):
 
 def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15, 
                           z_entry=0.5, z_exit=0.1, initial_capital=10000, 
-                          transaction_cost=0.001, stop_loss_z=3.0, stop_loss_ratio=0.1,
+                          transaction_cost=0.001, stop_loss_z=4.5, stop_loss_ratio=0.3,
                           Performance="Y", Graphs="Y"):
     """
     Parameters:
@@ -471,13 +468,17 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
 
 
 
-def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net_sharpe_ratio'):
+def optimisation_parms(pairs_df,pair_index, initial_capital=10000, 
+                       transaction_cost=0.001, params=None, optimisation_metric='net_sharpe_ratio'):
+    """Minimise the parameters to use to find optimise the strategy due to expotential effect"""
     if params is None:
         params= {
             'ma_short' : [3, 5, 7, 10],
             'ma_long' : [10, 15, 20, 30],
             'exit_z': [0, 0.05, 0.1, 0.25],
-            'entry_z': [0.5, 0.75, 1, 1.5]
+            'entry_z': [0.5, 0.75, 1, 1.5],
+            'stop_loss_z': [4.5], 
+            'stop_loss_ratio': [0.3]
         }
 
         best_result = None
@@ -491,53 +492,61 @@ def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net
                     for Entry in params['entry_z']:
                         if Entry <= Exit:
                             continue
-                        try:
-                            signals, performance = moving_average_strategy(
-                                pairs_df, item = pair_index, 
-                                ma_short = Short,
-                                ma_long = Long,
-                                z_entry = Entry,
-                                z_exit = Exit,
-                                Performance="N",
-                                Graphs="N"
-                            )
+                        for SLR in params['stop_loss_ratio']:
+                            for SLZ in params['stop_loss_z']:
+                                try:
+                                    signals, performance = moving_average_strategy(
+                                        pairs_df, item = pair_index, 
+                                        ma_short = Short,
+                                        ma_long = Long,
+                                        z_entry = Entry,
+                                        z_exit = Exit,
+                                        initial_capital= initial_capital,
+                                        transaction_cost=transaction_cost,
+                                        stop_loss_ratio=SLR,
+                                        stop_loss_z=SLZ,
+                                        Performance="N",
+                                        Graphs="N"
+                                    )
 
-                            if optimisation_metric == 'net_sharpe_ratio':
-                                score = performance['net_sharpe_ratio']
-                            elif optimisation_metric == 'net_total_return':
-                                score = performance['net_total_return']
-                            elif optimisation_metric == 'net_annual_return':
-                                score = performance['net_annual_return']
-                            elif optimisation_metric == 'return_to_drawdown':
-                                if performance['net_max_drawdown'] != 0:
-                                    score = performance['net_total_return'] / abs(performance['net_max_drawdown'])
-                                else:
-                                    score = performance['net_total_return']
-                            elif optimisation_metric == 'profit_factor':
-                                trades = signals[signals['signal'] != 0]
-                                if len(trades) > 0:
-                                    returns = signals['net_strategy_returns']
-                                    gross_profit = returns[returns > 0].sum()
-                                    gross_loss = abs(returns[returns < 0].sum())
-                                    score = gross_profit / gross_loss if gross_loss > 0 else gross_profit
-                                else:
-                                    score = 0
-                            else:
-                                raise ValueError(f"Unknown optimiation metric: {optimisation_metric}")
+                                    if optimisation_metric == 'net_sharpe_ratio':
+                                        score = performance['net_sharpe_ratio']
+                                    elif optimisation_metric == 'net_total_return':
+                                        score = performance['net_total_return']
+                                    elif optimisation_metric == 'net_annual_return':
+                                        score = performance['net_annual_return']
+                                    elif optimisation_metric == 'return_to_drawdown':
+                                        if performance['net_max_drawdown'] != 0:
+                                            score = performance['net_total_return'] / abs(performance['net_max_drawdown'])
+                                        else:
+                                            score = performance['net_total_return']
+                                    elif optimisation_metric == 'profit_factor':
+                                        trades = signals[signals['signal'] != 0]
+                                        if len(trades) > 0:
+                                            returns = signals['net_strategy_returns']
+                                            gross_profit = returns[returns > 0].sum()
+                                            gross_loss = abs(returns[returns < 0].sum())
+                                            score = gross_profit / gross_loss if gross_loss > 0 else gross_profit
+                                        else:
+                                            score = 0
+                                    else:
+                                        raise ValueError(f"Unknown optimiation metric: {optimisation_metric}")
                             
-                            if score > best_score:
-                                best_score = score
-                                best_result = {
-                                    'ma_short': Short,
-                                    'ma_long': Long,
-                                    'z_entry': Entry,
-                                    'z_exit': Exit,
-                                    'performance': performance,
-                                    'optimisation_score':score,
-                                    'optimisated metric': optimisation_metric
-                                }
-                        except:
-                            continue
+                                    if score > best_score:
+                                        best_score = score
+                                        best_result = {
+                                            'ma_short': Short,
+                                            'ma_long': Long,
+                                            'z_entry': Entry,
+                                            'z_exit': Exit,
+                                            'stop_loss_ratio': SLR,
+                                            'stop_loss_z': SLZ,
+                                            'performance': performance,
+                                            'optimisation_score':score,
+                                            'optimisated metric': optimisation_metric
+                                        }
+                                except:
+                                    continue
     
     if best_result:
         print(f"Best parameters found (optimised for {optimisation_metric}):")
@@ -545,6 +554,8 @@ def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net
         print(f"  MA Long: {best_result['ma_long']}")
         print(f"  Z Entry: {best_result['z_entry']}")
         print(f"  Z Exit: {best_result['z_exit']}")
+        print(f"  Stop Loss Ratio: {best_result['stop_loss_ratio']:.2f}")
+        print(f"  Stop Loss Z-score: {best_result['stop_loss_z']}")
         print(f"  {optimisation_metric}: {best_result['optimisation_score']:.3f}")
         print(f"  Net Total Return: {best_result['performance']['net_total_return']:.2f}%")
         print(f"  Net Sharpe Ratio: {best_result['performance']['net_sharpe_ratio']:.3f}")
@@ -557,7 +568,7 @@ def optimisation_parms(pairs_df,pair_index,params=None, optimisation_metric='net
 if __name__ == "__main__":
     stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
                      'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
-                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR']
+                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR','AV.L','INTC','PINC','GS','MU']
     
     pairs = coint_tester(stock_tickers)
     print(f"Found {len(pairs)} cointegrated pairs")
@@ -628,4 +639,4 @@ if __name__ == "__main__":
         print(f"\nBest net Return {best_return['Pair']}({best_return['Net Return (%)']:.2f}%)")
         print(f"Best Sharpe ratio {best_sharpe['Pair']}({best_sharpe['Net Sharpe']:.2f})")
         print(f"Best Risk-Adjusted: {best_risk_adj['Pair']} (Return/MaxDD: {risk_adj_ratio:.2f})")
-    optimisation_parms(pairs, 1)
+    optimisation_parms(pairs, 3, optimisation_metric = 'net_total_return')
