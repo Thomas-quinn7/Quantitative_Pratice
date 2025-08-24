@@ -1,4 +1,6 @@
 import random 
+import time
+start_time = time.time()
 score = 0
 given_ans="No"
 user_ans=0
@@ -17,6 +19,8 @@ game_over = False
         asked to operate on
         random.randint(a,b) generates number N
         a <= N <= b
+
+        1.5 seconds of delay added to timer to be fair to play
         """
 
 while given_ans!="done" and not game_over:
@@ -113,5 +117,9 @@ while given_ans!="done" and not game_over:
             score += 1
             print("Correct!")
 
+end_time = time.time()
+elapsed = end_time - start_time + 1.5
+print("=" * 100)
 print("Thanks for playing")
-print(f"Final score {score}")
+print(f"Final score: {score}")
+print(f"Time taken: {elapsed:.2f} seconds")
