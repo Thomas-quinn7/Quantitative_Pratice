@@ -26,7 +26,7 @@ game_over = False
 while given_ans!="done" and not game_over:
     if score == 0:
         print("To end the game please type  'done'")
-    operation_sel=random.randint(1,5)
+    operation_sel=random.randint(1,4)
     if operation_sel==1:
         a = random.randint(12,100)
         b = random.randint(12,100)
