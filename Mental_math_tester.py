@@ -5,6 +5,7 @@ score = 0
 given_ans="No"
 user_ans=0
 game_over = False
+Errors = 0
 """
     Just small programme to pratice mental maths
 
@@ -38,6 +39,9 @@ while given_ans!="done" and not game_over:
                 break
             try:
                 user_ans = int(given_ans)
+                if user_ans != answer:
+                        print("Answer incorrect, please try again!")
+                        Errors +=1
             except ValueError:
                 print("Please enter a number or 'done'")
                 continue
@@ -58,6 +62,9 @@ while given_ans!="done" and not game_over:
                 break
             try:
                 user_ans = int(given_ans)
+                if user_ans != answer:
+                        print("Answer incorrect, please try again!")
+                        Errors +=1
             except ValueError:
                 print("Please enter a number or 'done'")
                 continue
@@ -77,6 +84,9 @@ while given_ans!="done" and not game_over:
                 break
             try:
                 user_ans = int(given_ans)
+                if user_ans != answer:
+                        print("Answer incorrect, please try again!")
+                        Errors +=1
             except ValueError:
                 print("Please enter a number or 'done'")
                 continue
@@ -97,6 +107,9 @@ while given_ans!="done" and not game_over:
                     break
                 try:
                     user_ans = int(given_ans)
+                    if user_ans != answer:
+                        print("Answer incorrect, please try again!")
+                        Errors +=1
                 except ValueError:
                     print("Please enter a number or 'done'")
                     continue
@@ -109,6 +122,9 @@ while given_ans!="done" and not game_over:
                     break
                 try:
                     user_ans = int(given_ans)
+                    if user_ans != answer:
+                        print("Answer incorrect, please try again!")
+                        Errors +=1
                 except ValueError:
                     print("Please enter a number or 'done'")
                     continue
@@ -119,7 +135,13 @@ while given_ans!="done" and not game_over:
 
 end_time = time.time()
 elapsed = end_time - start_time + 1.5
+if score == 0 and Errors == 0:
+    accuracy = 0
+else:
+    accuracy = (score/(score + Errors))*100
 print("=" * 100)
 print("Thanks for playing")
 print(f"Final score: {score}")
 print(f"Time taken: {elapsed:.2f} seconds")
+print(f"Errors: {Errors}")
+print(f"Accuracy percent: {accuracy:.2f}%")
