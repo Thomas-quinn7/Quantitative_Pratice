@@ -1,11 +1,6 @@
 import random 
 import time
-start_time = time.time()
-score = 0
-given_ans="No"
-user_ans=0
-game_over = False
-Errors = 0
+
 """
     Just small programme to pratice mental maths
 
@@ -24,13 +19,32 @@ Errors = 0
         1.5 seconds of delay added to timer to be fair to play
         """
 
+start_time = time.time()
+score = 0
+given_ans="No"
+user_ans=0
+game_over = False
+Errors = 0
+
+addition_LB = 100
+addition_UB = 1000
+
+subtract_LB = 100
+subtract_UB = 1000
+
+multiply_LB = 12
+multiply_UB = 100
+
+division_LB = 12
+division_UB = 100
+
 while given_ans!="done" and not game_over:
     if score == 0:
         print("To end the game please type  'done'")
     operation_sel=random.randint(1,4)
     if operation_sel==1:
-        a = random.randint(12,100)
-        b = random.randint(12,100)
+        a = random.randint(multiply_LB, multiply_UB)
+        b = random.randint(multiply_LB, multiply_UB)
         answer = a*b
         while answer != user_ans:
             given_ans = input(f"{a}*{b}=")
@@ -51,8 +65,8 @@ while given_ans!="done" and not game_over:
             print("Correct!")
     
     elif operation_sel==2:
-        a = random.randint(12,100)
-        b = random.randint(12,100)
+        a = random.randint(division_LB, division_UB)
+        b = random.randint(division_LB, division_UB)
         Main_num = a*b
         answer = a
         while answer != user_ans:
@@ -74,8 +88,8 @@ while given_ans!="done" and not game_over:
             print("Correct!")
 
     elif operation_sel==3:
-        a = random.randint(100,1000)
-        b = random.randint(100,1000)
+        a = random.randint(addition_LB, addition_UB)
+        b = random.randint(addition_LB, addition_UB)
         answer = a+b
         while answer != user_ans:
             given_ans = input(f"{a}+{b}=")
@@ -96,8 +110,8 @@ while given_ans!="done" and not game_over:
             print("Correct!")
     
     elif operation_sel==4:
-        a = random.randint(100,1000)
-        b = random.randint(100,1000)
+        a = random.randint(subtract_LB, subtract_UB)
+        b = random.randint(subtract_LB, subtract_UB)
         if a >= b:
             answer = a-b
             while answer != user_ans:
