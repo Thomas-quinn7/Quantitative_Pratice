@@ -128,7 +128,7 @@ def strat_stats(pairs_df,item=0,stat_sig=0.05):
 def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15, 
                           z_entry=0.5, z_exit=0.1, initial_capital=10000, 
                           transaction_cost=0.001, stop_loss_z=4.5, stop_loss_ratio=0.3,
-                          Performance="Y", Graphs="Y",save_plots=True):
+                          Performance=True, Graphs=True,save_plots=True):
     """
     Parameters:
     - pairs_df: DataFrame with cointegrated pairs
@@ -388,7 +388,7 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     total_transaction_costs = signals['transaction_costs'].sum() * initial_capital
     cost_impact = (gross_total_return - net_total_return)
     
-    if Performance=="Y":
+    if Performance:
         print(f"\n=== Moving Average Strategy Results for {n1}/{n2} ===")
         print(f"Strategy Parameters:")
         print(f"  - Short MA: {ma_short} days")
@@ -414,7 +414,7 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
         print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
 
-    if Graphs=="Y":
+    if Graphs:
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     
         ax1.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
@@ -521,8 +521,8 @@ def optimisation_parms(pairs_df,pair_index, initial_capital=10000,
                                         transaction_cost=transaction_cost,
                                         stop_loss_ratio=SLR,
                                         stop_loss_z=SLZ,
-                                        Performance="N",
-                                        Graphs="N"
+                                        Performance=False,
+                                        Graphs=False
                                     )
 
                                     if optimisation_metric == 'net_sharpe_ratio':
@@ -1062,7 +1062,7 @@ if __name__ == "__main__":
     print("\nPAIRS PORTFOLIO OPTIMIZATION\n")
     
     if len(successful_results) > 1:
-        print("\n1. Optimizing weighting across pairs strategies")
+        print("\n Optimizing weighting across pairs strategies")
         pairs_portfolio = optimize_pairs_portfolio(
             successful_results,
             optimization_method='max_sharpe',
@@ -1071,17 +1071,17 @@ if __name__ == "__main__":
         )
         
         if pairs_portfolio.get('success', False):
-            print("\n2. Portfolio analysis")
+            print("\n Portfolio analysis")
             plot_pairs_portfolio_analysis(pairs_portfolio)
             
-            print("\n3. Backtesting pairs portfolio")
+            print("\n Backtesting pairs portfolio")
             backtest_results = pairs_portfolio_backtest(
                 pairs_portfolio,
                 rebalance_frequency='monthly',
                 transaction_cost=0.001
             )
             
-            print("\n4. Generating efficient frontier")
+            print("\n Generating efficient frontier")
             efficient_frontier = pairs_efficient_frontier(successful_results)
     
     else:
