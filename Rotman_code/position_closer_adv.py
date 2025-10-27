@@ -91,17 +91,24 @@ def cancel_order(session, order_id):
     return resp.json()
 
 def submit_market_order(session, ticker, quantity, action):
-    """Submit a market order to close position"""
+    """Submit a market order to close position - capped at 25k max"""
+    abs_quantity = abs(quantity)
+    MAX_ORDER_SIZE = 25000
+    
+    # Cap at 25k if order exceeds limit
+    if abs_quantity > MAX_ORDER_SIZE:
+        abs_quantity = MAX_ORDER_SIZE
+    
     params = {
         'ticker': ticker,
         'type': 'MARKET',
-        'quantity': abs(quantity),
+        'quantity': abs_quantity,
         'action': action
     }
     resp = session.post('http://localhost:9999/v1/orders', params=params)
     if resp.status_code == 401:
         raise ApiException('Invalid API key')
-    invalidate_cache()  # Invalidate cache after modification
+    invalidate_cache()
     return resp.json()
 
 def cancel_stale_orders(session, max_age_seconds=30):
