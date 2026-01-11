@@ -45,7 +45,7 @@ def heatmap(tickers):
     plt.close()
     return d
 
-def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significant=0.05):
+def coint_tester(tickers,corr_threshold=0.95,Output_adfuller=True,stat_significant=0.01):
     data = data_fetcher(tickers)
     corr_matrix = data.corr()
     pairs = list(combinations(tickers, 2))
@@ -78,7 +78,7 @@ def coint_tester(tickers,corr_threshold=0.9,Output_adfuller=True,stat_significan
                              ['s1', 's2', 'pvs', 'pvr','stock_1_data','stock_2_data'])
     return all_pairs
 
-def strat_stats(pairs_df,item=0,stat_sig=0.05):
+def strat_stats(pairs_df,item=0,stat_sig=0.01):
     """This function is the base function to understand 
     if you want to proceed to implement the strategy"""
     if len(pairs_df)==0:
@@ -128,7 +128,10 @@ def strat_stats(pairs_df,item=0,stat_sig=0.05):
 def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15, 
                           z_entry=0.5, z_exit=0.1, initial_capital=10000, 
                           transaction_cost=0.001, stop_loss_z=4.5, stop_loss_ratio=0.3,
-                          Performance="Y", Graphs="Y",save_plots=True):
+                          Performance="Y", Graphs="Y", save_plots=True,
+                          retest_quarterly=True, stat_sig=0.01, adf_window=252,
+                          z_window=60, z_step=0.5, max_units=5,
+                          debug=False):
     """
     Parameters:
     - pairs_df: DataFrame with cointegrated pairs
@@ -158,7 +161,8 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
 
     ratio = s1_aligned / s2_aligned
     ratio.dropna(inplace=True)
-    z_score = (ratio - ratio.mean()) / ratio.std()
+    # Constant z-score over the full sample (no daily re-adjustment)
+    z_score = (ratio - ratio.mean()) / ratio.std(ddof=1)
 
     ma_short_series = z_score.rolling(window=ma_short).mean()
     ma_long_series = z_score.rolling(window=ma_long).mean()
@@ -174,6 +178,8 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     signals['entry_ratio'] = np.nan  
     signals['max_favorable_ratio'] = np.nan  
     signals['stop_loss_triggered'] = False
+    signals['active'] = True
+    signals['adf_pvalue'] = np.nan
     
     #Strategy logic for more frequent trading with stop losses:
     # 1. Thresholds for entry/exit
@@ -181,7 +187,47 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     # 3. Exit conditions
     # 4. Stop loss protection for black swan events
     
-    for i in range(ma_long, len(signals)):
+    # Quarterly re-test state
+    last_quarter = signals.index[ma_long - 1].to_period('Q') if len(signals) >= ma_long else None
+    active = True
+
+    start_index = ma_long
+    for i in range(start_index, len(signals)):
+        ts = signals.index[i]
+        # Quarterly re-test of stationarity on trailing window
+        if retest_quarterly:
+            current_q = ts.to_period('Q')
+            if last_quarter is None:
+                last_quarter = current_q
+            if current_q != last_quarter:
+                start_idx = max(0, i - int(adf_window))
+                series = signals['ratio'].iloc[start_idx:i].dropna()
+                pval = np.nan
+                try:
+                    if len(series) >= 50:
+                        pval = float(adfuller(series, maxlag=1, autolag='AIC')[1])
+                        active = bool(pval < stat_sig)
+                    else:
+                        active = False
+                except Exception:
+                    active = False
+                signals.loc[ts, 'adf_pvalue'] = pval
+                signals.loc[ts, 'active'] = active
+
+                # If not active, force flat position immediately
+                prev_position = signals['position'].iloc[i-1]
+                if not active and prev_position != 0:
+                    signals.loc[ts, 'signal'] = -prev_position
+                    signals.loc[ts, 'position'] = 0
+                    signals.loc[ts, 'trade_reason'] = 'Quarterly re-test failed (ADF)'
+                    signals.loc[ts, 'entry_ratio'] = np.nan
+                    signals.loc[ts, 'max_favorable_ratio'] = np.nan
+                    last_quarter = current_q
+                    continue
+                last_quarter = current_q
+            else:
+                # carry forward last known state
+                signals.loc[ts, 'active'] = active
         current_z = signals['z_score'].iloc[i]
         prev_z = signals['z_score'].iloc[i-1]
         current_ma_short = signals['ma_short'].iloc[i]
@@ -194,15 +240,11 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         prev_entry_ratio = signals['entry_ratio'].iloc[i-1] if i > 0 else np.nan
         prev_max_favorable = signals['max_favorable_ratio'].iloc[i-1] if i > 0 else np.nan
 
-        ma_cross_up = (prev_ma_short <= prev_ma_long) and (current_ma_short > current_ma_long)
-        ma_cross_down = (prev_ma_short >= prev_ma_long) and (current_ma_short < current_ma_long)
-
-        ma_diverging_up = current_ma_short > current_ma_long and (current_ma_short - current_ma_long) > (prev_ma_short - prev_ma_long)
-        ma_diverging_down = current_ma_short < current_ma_long and (current_ma_short - current_ma_long) < (prev_ma_short - prev_ma_long)
+        # MA variables retained for plotting, but entry/exit uses z-scores only
         
         stop_loss_hit = False
         
-        if prev_position != 0 and not np.isnan(prev_entry_ratio):
+        if active and prev_position != 0 and not np.isnan(prev_entry_ratio):
             z_stop_loss = abs(current_z) > stop_loss_z
             
             if prev_position == 1:
@@ -236,117 +278,64 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
                 signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan
                 continue  
         
+        
+        if not active:
+            # Stay flat when inactive
+            signals.loc[signals.index[i], 'position'] = 0
+            signals.loc[signals.index[i], 'entry_ratio'] = np.nan
+            signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan
+            continue
+        
+        # Laddered target position by z-score increments (z_step), capped by max_units
+        abs_z = abs(current_z)
+        if abs_z <= z_exit:
+            target_units = 0
+        elif abs_z < z_entry:
+            target_units = 0
+        else:
+            target_units = int(min(max_units, 1 + np.floor((abs_z - z_entry) / max(z_step, 1e-8))))
 
-        if prev_position == 0:
-            long_condition1 = ma_cross_up and current_z < -z_entry*0.8  
-            long_condition2 = ma_diverging_up and current_z < -z_entry*0.6 
-            long_condition3 = current_z < -z_entry and current_z < prev_z 
-            long_condition4 = (current_ma_short > current_ma_long) and current_z < -z_entry*0.4 and (current_z - prev_z) < -0.1 
-            
-            short_condition1 = ma_cross_down and current_z > z_entry*0.8 
-            short_condition2 = ma_diverging_down and current_z > z_entry*0.6 
-            short_condition3 = current_z > z_entry and current_z > prev_z 
-            short_condition4 = (current_ma_short < current_ma_long) and current_z > z_entry*0.4 and (current_z - prev_z) > 0.1 
-            
-            if long_condition1 or long_condition2 or long_condition3 or long_condition4:
-                signals.loc[signals.index[i], 'signal'] = 1
-                signals.loc[signals.index[i], 'position'] = 1
-                signals.loc[signals.index[i], 'entry_ratio'] = current_ratio  
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = current_ratio  
-                
-                if long_condition1:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Entry: MA Cross + Oversold'
-                elif long_condition2:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Entry: MA Diverging + Oversold'
-                elif long_condition3:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Entry: Strong Oversold + Momentum'
-                else:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Entry: Bullish MA + Z-Score Drop'
-            
-            elif short_condition1 or short_condition2 or short_condition3 or short_condition4:
-                signals.loc[signals.index[i], 'signal'] = -1
-                signals.loc[signals.index[i], 'position'] = -1
-                signals.loc[signals.index[i], 'entry_ratio'] = current_ratio 
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = current_ratio
-                
-                if short_condition1:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Entry: MA Cross + Overbought'
-                elif short_condition2:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Entry: MA Diverging + Overbought'
-                elif short_condition3:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Entry: Strong Overbought + Momentum'
-                else:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Entry: Bearish MA + Z-Score Rise'
-            else:
-                signals.loc[signals.index[i], 'position'] = prev_position
-                signals.loc[signals.index[i], 'entry_ratio'] = prev_entry_ratio
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = prev_max_favorable
-        
-        elif prev_position == 1:
+        desired_pos = 0
+        if current_z > z_entry:
+            desired_pos = -target_units  # short when z positive (overbought)
+        elif current_z < -z_entry:
+            desired_pos = +target_units  # long when z negative (oversold)
+
+        delta_units = desired_pos - prev_position
+        # Update signal direction for plotting
+        if delta_units > 0:
+            signals.loc[signals.index[i], 'signal'] = 1
+        elif delta_units < 0:
+            signals.loc[signals.index[i], 'signal'] = -1
+
+        # Manage entry/exit bookkeeping
+        if prev_position == 0 and desired_pos != 0:
+            signals.loc[signals.index[i], 'entry_ratio'] = current_ratio
+            signals.loc[signals.index[i], 'max_favorable_ratio'] = current_ratio
+            signals.loc[signals.index[i], 'trade_reason'] = 'Enter (ladder)'
+        elif desired_pos == 0 and prev_position != 0:
+            signals.loc[signals.index[i], 'entry_ratio'] = np.nan
+            signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan
+            signals.loc[signals.index[i], 'trade_reason'] = 'Exit all (ladder)'
+        else:
+            if delta_units != 0:
+                signals.loc[signals.index[i], 'trade_reason'] = 'Scale ' + ('in' if abs(desired_pos) > abs(prev_position) else 'out')
+
+        # Track max favorable excursion
+        if desired_pos > 0:  # long ratio
             if current_ratio > prev_max_favorable or np.isnan(prev_max_favorable):
-                new_max_favorable = current_ratio
+                signals.loc[signals.index[i], 'max_favorable_ratio'] = current_ratio
             else:
-                new_max_favorable = prev_max_favorable
-                
-            exit_condition1 = ma_cross_down  
-            exit_condition2 = abs(current_z) < z_exit  
-            exit_condition3 = current_z > z_entry*0.3  
-            exit_condition4 = (current_z > prev_z) and current_z > -z_entry*0.3  
-            exit_condition5 = current_ma_short < current_ma_long and current_z > -z_entry*0.2  
-            
-            if exit_condition1 or exit_condition2 or exit_condition3 or exit_condition4 or exit_condition5:
-                signals.loc[signals.index[i], 'signal'] = -1
-                signals.loc[signals.index[i], 'position'] = 0
-                signals.loc[signals.index[i], 'entry_ratio'] = np.nan  
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan
-                
-                if exit_condition1:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Exit: MA Cross Down'
-                elif exit_condition2:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Exit: Mean Reversion'
-                elif exit_condition3:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Exit: Moved Overbought'
-                elif exit_condition4:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Exit: Z-Score Momentum Reversal'
-                else:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Long Exit: Bearish MA Setup'
-            else:
-                signals.loc[signals.index[i], 'position'] = prev_position
-                signals.loc[signals.index[i], 'entry_ratio'] = prev_entry_ratio
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = new_max_favorable
-        
-        elif prev_position == -1:
+                signals.loc[signals.index[i], 'max_favorable_ratio'] = prev_max_favorable
+        elif desired_pos < 0:  # short ratio
             if current_ratio < prev_max_favorable or np.isnan(prev_max_favorable):
-                new_max_favorable = current_ratio
+                signals.loc[signals.index[i], 'max_favorable_ratio'] = current_ratio
             else:
-                new_max_favorable = prev_max_favorable
-                
-            exit_condition1 = ma_cross_up  
-            exit_condition2 = abs(current_z) < z_exit  
-            exit_condition3 = current_z < -z_entry*0.3  
-            exit_condition4 = (current_z < prev_z) and current_z < z_entry*0.3  
-            exit_condition5 = current_ma_short > current_ma_long and current_z < z_entry*0.2  
-            
-            if exit_condition1 or exit_condition2 or exit_condition3 or exit_condition4 or exit_condition5:
-                signals.loc[signals.index[i], 'signal'] = 1
-                signals.loc[signals.index[i], 'position'] = 0
-                signals.loc[signals.index[i], 'entry_ratio'] = np.nan  
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan
-                
-                if exit_condition1:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Exit: MA Cross Up'
-                elif exit_condition2:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Exit: Mean Reversion'
-                elif exit_condition3:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Exit: Moved Oversold'
-                elif exit_condition4:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Exit: Z-Score Momentum Reversal'
-                else:
-                    signals.loc[signals.index[i], 'trade_reason'] = 'Short Exit: Bullish MA Setup'
-            else:
-                signals.loc[signals.index[i], 'position'] = prev_position
-                signals.loc[signals.index[i], 'entry_ratio'] = prev_entry_ratio
-                signals.loc[signals.index[i], 'max_favorable_ratio'] = new_max_favorable
+                signals.loc[signals.index[i], 'max_favorable_ratio'] = prev_max_favorable
+        else:
+            signals.loc[signals.index[i], 'max_favorable_ratio'] = np.nan if prev_position == 0 else prev_max_favorable
+
+        signals.loc[signals.index[i], 'position'] = desired_pos
     
     signals['ratio'] = ratio
     signals['ratio_returns'] = ratio.pct_change()
@@ -354,7 +343,8 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     signals['position_change'] = signals['position'].diff().fillna(0)
     signals['trade_occurred'] = (signals['position_change'] != 0).astype(int)
     
-    signals['transaction_costs'] = signals['trade_occurred'] * transaction_cost * 2  
+    # Cost per unit change (scale with abs change)
+    signals['transaction_costs'] = signals['position_change'].abs() * transaction_cost * 2  
     
     signals['gross_strategy_returns'] = signals['position'].shift(1) * signals['ratio_returns']
     
@@ -384,6 +374,7 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
     trades = signals[signals['signal'] != 0]
     stop_loss_trades = signals[signals['stop_loss_triggered'] == True]
     num_trades = len(trades)
+    unit_changes = int(signals['position_change'].abs().sum())
     num_stop_losses = len(stop_loss_trades)
     total_transaction_costs = signals['transaction_costs'].sum() * initial_capital
     cost_impact = (gross_total_return - net_total_return)
@@ -403,6 +394,7 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         print(f"  - Stop Loss Exits: {num_stop_losses} ({num_stop_losses/num_trades*100:.1f}% of trades)")
         print(f"  - Normal Exits: {num_trades - num_stop_losses}")
         print(f"  - Total Transaction Costs: ${total_transaction_costs:.2f}")
+        print(f"  - Unit Changes (scaled trades): {unit_changes}")
         print(f"  - Cost Impact on Returns: -{cost_impact:.2f}%")
         print(f"\nPerformance Metrics (Gross vs Net):")
         print(f"  - Total Return: {gross_total_return:.2f}% → {net_total_return:.2f}%")
@@ -425,12 +417,12 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
         ax1.axhline(z_exit, color='orange', linestyle=':', alpha=0.7)
         ax1.axhline(-z_exit, color='orange', linestyle=':', alpha=0.7)
         ax1.axhline(0, color='black', linestyle='-', alpha=0.5)
-        ax1.set_title(f'Z-Score and Moving Averages: {n1}/{n2}')
+        ax1.set_title(f'Z-Score and Signals: {n1}/{n2}')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
-        buy_signals = signals[signals['signal'] == 1]
-        sell_signals = signals[signals['signal'] == -1]
+        buy_signals = signals[signals['signal'] > 0]
+        sell_signals = signals[signals['signal'] < 0]
     
         ax2.plot(signals.index, signals['z_score'], label='Z-Score', alpha=0.7)
         ax2.scatter(buy_signals.index, buy_signals['z_score'], color='green', 
@@ -465,6 +457,78 @@ def moving_average_strategy(pairs_df, item=0, ma_short=5, ma_long=15,
             os.makedirs('charts', exist_ok=True)
             plt.savefig(f'charts/pairs_strategy_{n1}_{n2}.png', dpi=300, bbox_inches='tight')
         plt.show()
+
+        if debug:
+            # Additional debug figure to diagnose thresholds, scaling, and stationarity gating
+            fig_dbg, (dx1, dx2, dx3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+
+            # dx1: Z-score with ladder thresholds and no-trade band
+            dx1.plot(signals.index, signals['z_score'], label='Z-Score', color='steelblue', alpha=0.9)
+            # No-trade band
+            dx1.axhspan(-z_exit, z_exit, color='orange', alpha=0.15, label='No-trade band (|z|<=z_exit)')
+            # Ladder thresholds
+            z_abs_max = float(np.nanmax(np.abs(signals['z_score'].values))) if len(signals) else z_entry
+            levels = []
+            lvl = float(z_entry)
+            while lvl <= z_abs_max + z_step and len(levels) < 50:
+                levels.append(lvl)
+                lvl += float(max(z_step, 1e-8))
+            for lvl in levels:
+                dx1.axhline(lvl, color='red', linestyle='--', alpha=0.25)
+                dx1.axhline(-lvl, color='green', linestyle='--', alpha=0.25)
+            dx1.axhline(0, color='black', linestyle='-', alpha=0.3)
+            dx1.set_ylabel('Z-Score')
+            dx1.set_title('Debug: Z with ladder thresholds')
+            dx1.grid(True, alpha=0.3)
+            dx1.legend(loc='upper right')
+
+            # dx2: Position units (stair-step) and active shading
+            pos = signals['position'].fillna(0)
+            dx2.step(signals.index, pos, where='post', label='Position (units)', color='purple')
+            dx2.axhline(0, color='black', linestyle='--', alpha=0.4)
+            # Shade inactive periods
+            if 'active' in signals.columns:
+                active_series = signals['active'].fillna(True)
+                # Mark inactive points with background spans
+                inactive = (active_series == False)
+                if inactive.any():
+                    # Find contiguous inactive segments
+                    idx = signals.index
+                    in_seg = False
+                    seg_start = None
+                    for t, is_inactive in zip(idx, inactive):
+                        if is_inactive and not in_seg:
+                            in_seg = True
+                            seg_start = t
+                        elif not is_inactive and in_seg:
+                            dx2.axvspan(seg_start, t, color='grey', alpha=0.15, label='Inactive' if seg_start == idx[0] else None)
+                            in_seg = False
+                    if in_seg and seg_start is not None:
+                        dx2.axvspan(seg_start, idx[-1], color='grey', alpha=0.15)
+            dx2.set_ylabel('Units')
+            dx2.set_title('Debug: Position units (inactive shaded)')
+            dx2.grid(True, alpha=0.3)
+            dx2.legend(loc='upper left')
+
+            # dx3: ADF p-value over time at quarterly checks
+            if 'adf_pvalue' in signals.columns:
+                pvals = signals['adf_pvalue']
+                dx3.plot(signals.index, pvals, label='ADF p-value', color='brown', alpha=0.8)
+                dx3.axhline(stat_sig, color='black', linestyle='--', alpha=0.6, label=f'Threshold {stat_sig}')
+                dx3.set_yscale('log')
+                dx3.set_ylabel('p-value (log)')
+                dx3.set_title('Debug: ADF p-value at re-tests')
+                dx3.grid(True, which='both', alpha=0.3)
+                dx3.legend(loc='upper right')
+            else:
+                dx3.text(0.5, 0.5, 'ADF p-values not recorded', transform=dx3.transAxes, ha='center')
+                dx3.set_axis_off()
+
+            plt.tight_layout()
+            if save_plots:
+                os.makedirs('charts', exist_ok=True)
+                plt.savefig(f'charts/pairs_strategy_{n1}_{n2}_debug.png', dpi=300, bbox_inches='tight')
+            plt.show()
     
     return signals, {
         'gross_total_return': gross_total_return,
@@ -987,8 +1051,9 @@ def pairs_efficient_frontier(successful_results, num_points=20,save_plots=True):
 if __name__ == "__main__":
     stock_tickers = ['AAPL','GOOG','TSLA','MSFT','NVDA','JPM','AMD','META','AMZN',
                      'BRK-B','PLTR','^SPX','BA','KO','SMCI','RTX','^IXIC','RYA.IR',
-                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR','AV.L','INTC','PINC','GS','MU']
-    
+                     'A5G.IR','BIRG.IR','KRZ.IR','GL9.IR','AV.L','INTC','PINC','GS','MU'
+                     ,'TGT','RIVN','F','GM','NIO','XPEV','LI','HMC','TM','SONY','SNE','VZ','T','RYAAY']
+
     pairs = coint_tester(stock_tickers)
     print(f"Found {len(pairs)} cointegrated pairs")
     all_results=[]
