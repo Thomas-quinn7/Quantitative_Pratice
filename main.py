@@ -233,6 +233,10 @@ def main():
         # test_interactive_plots()
         # test_plot_description()
         skew_surface("AAPL")
+        skew_surface("MSFT")
+        skew_surface("TSLA")
+        skew_surface("NVDA")
+
 
 
         print("All tests passed successfully!")

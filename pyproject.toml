@@ -13,5 +13,7 @@ dependencies = [
     "qdrant-client>=1.15.1",
     "seaborn>=0.13.2",
     "yfinance>=0.2.65",
+    "arch>=6.0",
+    "statsmodels>=0.14.1",
 ]
 
