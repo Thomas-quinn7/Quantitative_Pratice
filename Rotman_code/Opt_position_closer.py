@@ -243,6 +243,7 @@ def main():
         print("  • Cancel stale orders (30+ ticks)")
         print("  • Final closeout at tick 298 (2 seconds remaining)")
         print("  • Orders capped at 25k, auto-split large positions")
+        print("  • TIMING DIAGNOSTICS ENABLED")
         print(f"\n{'='*60}\n")
         
         closed = False
@@ -250,6 +251,8 @@ def main():
         
         while not shutdown:
             try:
+                loop_start = time()
+                
                 tick = get_tick(session)
                 
                 if tick is None:
@@ -262,16 +265,29 @@ def main():
                     
                     # Every cycle (500ms)
                     if counter % 2 == 0:
+                        t1 = time()
                         cancel_flat_position_orders(session)
+                        flat_time = time() - t1
+                    else:
+                        flat_time = 0
                     
                     # Every 2 seconds
                     if counter % 4 == 0:
+                        t2 = time()
                         cancel_wrong_side_orders(session)
+                        wrong_time = time() - t2
+                        
+                        t3 = time()
                         cancel_stale_orders(session)
+                        stale_time = time() - t3
+                    else:
+                        wrong_time = 0
+                        stale_time = 0
                     
-                    # Status update
+                    # Status update with timing diagnostics
                     if tick % 10 == 0:
-                        print(f"Tick: {tick}/300")
+                        loop_time = time() - loop_start
+                        print(f"Tick: {tick}/300 | Loop: {loop_time*1000:.1f}ms | Flat: {flat_time*1000:.1f}ms | Wrong: {wrong_time*1000:.1f}ms | Stale: {stale_time*1000:.1f}ms")
                 
                 # Trigger closeout at tick 298
                 if tick >= 298 and not closed:
@@ -279,7 +295,9 @@ def main():
                     closed = True
                     break
                 
-                sleep(0.5)
+                loop_elapsed = time() - loop_start
+                sleep_time = max(0, 0.5 - loop_elapsed)
+                sleep(sleep_time)
                 
             except KeyboardInterrupt:
                 print("\n\nShutdown requested by user.")
