@@ -275,4 +275,4 @@ def skew_surface(ticker, otype="call"):
     plt.show()
     return T, K
 
-d=skew_surface("TSLA")
+d=skew_surface("AAPL")

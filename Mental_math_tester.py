@@ -148,7 +148,7 @@ while given_ans!="done" and not game_over:
             print("Correct!")
 
 end_time = time.time()
-elapsed = end_time - start_time + 1.5
+elapsed = end_time - start_time
 if score == 0 and Errors == 0:
     accuracy = 0
 else:
