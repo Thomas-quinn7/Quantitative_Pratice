@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple, Optional, List, Dict
+from collections import namedtuple
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -97,7 +98,120 @@ WARNING_INVERSION_THRESHOLD = 40
 DAILY_SNAPSHOT_CSV = "daily_IV_skew_snapshot.csv"
 BUBBLE_SUMMARY_CSV = "bubble_summary.csv"
 
-# Assisting functions
+# Data quality constants
+MIN_VOLUME = 10
+MIN_OPEN_INTEREST = 50
+MAX_BID_ASK_SPREAD_PCT = 20
+MIN_IV = 0.05
+MAX_IV = 3.0
+MIN_DTE = 7
+MAX_DTE = 60
+
+# ============== DATA VALIDATION FUNCTIONS ==============
+
+def validate_option_data(options_df: pd.DataFrame) -> pd.DataFrame:
+    """Filter options data to ensure quality and reliability."""
+    if options_df.empty:
+        return options_df
+    
+    df = options_df.copy()
+    
+    # Filter 1: Volume and Open Interest
+    df = df[
+        (df["volume"] >= MIN_VOLUME) & 
+        (df["openInterest"] >= MIN_OPEN_INTEREST)
+    ]
+    
+    # Filter 2: Bid-Ask Spread (if available)
+    if "bid" in df.columns and "ask" in df.columns:
+        df["mid"] = (df["bid"] + df["ask"]) / 2
+        df["spread_pct"] = ((df["ask"] - df["bid"]) / df["mid"]) * 100
+        df = df[df["spread_pct"] <= MAX_BID_ASK_SPREAD_PCT]
+    
+    # Filter 3: IV Sanity Checks
+    df = df[
+        (df["impliedVolatility"] >= MIN_IV) & 
+        (df["impliedVolatility"] <= MAX_IV) &
+        (df["impliedVolatility"].notna())
+    ]
+    
+    # Filter 4: Remove zero or negative strikes
+    df = df[df["strike"] > 0]
+    
+    return df
+
+
+def validate_expiry_date(expiry_str: str) -> Tuple[bool, int]:
+    """Check if expiry date is within acceptable range."""
+    try:
+        expiry_date = pd.to_datetime(expiry_str)
+        today = pd.Timestamp.now()
+        dte = (expiry_date - today).days
+        
+        is_valid = MIN_DTE <= dte <= MAX_DTE
+        return is_valid, dte
+    except:
+        return False, 0
+
+
+def get_best_expiry(expiry_dates: list) -> Optional[str]:
+    """Select the best expiry date for analysis. Prefer ~30 DTE."""
+    valid_expiries = []
+    
+    for exp in expiry_dates:
+        is_valid, dte = validate_expiry_date(exp)
+        if is_valid:
+            valid_expiries.append((exp, dte))
+    
+    if not valid_expiries:
+        return None
+    
+    # Prefer expiry closest to 30 days
+    valid_expiries.sort(key=lambda x: abs(x[1] - 30))
+    return valid_expiries[0][0]
+
+
+def compute_data_quality_score(
+    puts_df: pd.DataFrame, 
+    calls_df: pd.DataFrame,
+    spot_price: float
+) -> Dict[str, float]:
+    """Calculate data quality metrics to flag unreliable results."""
+    try:
+        otm_puts = puts_df[puts_df["strike"] < spot_price * 0.95]
+        otm_calls = calls_df[calls_df["strike"] > spot_price * 1.05]
+        
+        quality_metrics = {
+            "otm_put_count": len(otm_puts),
+            "otm_call_count": len(otm_calls),
+            "otm_put_avg_volume": otm_puts["volume"].mean() if len(otm_puts) > 0 else 0,
+            "otm_call_avg_volume": otm_calls["volume"].mean() if len(otm_calls) > 0 else 0,
+            "otm_put_avg_oi": otm_puts["openInterest"].mean() if len(otm_puts) > 0 else 0,
+            "otm_call_avg_oi": otm_calls["openInterest"].mean() if len(otm_calls) > 0 else 0,
+        }
+        
+        # Overall quality score (0-1)
+        min_options = 5
+        min_volume = 50
+        
+        quality_score = 0
+        if quality_metrics["otm_put_count"] >= min_options:
+            quality_score += 0.25
+        if quality_metrics["otm_call_count"] >= min_options:
+            quality_score += 0.25
+        if quality_metrics["otm_put_avg_volume"] >= min_volume:
+            quality_score += 0.25
+        if quality_metrics["otm_call_avg_volume"] >= min_volume:
+            quality_score += 0.25
+        
+        quality_metrics["quality_score"] = quality_score
+        
+        return quality_metrics
+    except:
+        return {"quality_score": 0.0}
+
+
+# ============== HELPER FUNCTIONS ==============
 
 def get_nearest_strike_indices(strikes: np.ndarray, target: float, n: int) -> np.ndarray:
     """Return indices of the n nearest strikes to the target price."""
@@ -114,28 +228,6 @@ def compute_robust_mean_iv(iv_values: np.ndarray) -> float:
     return np.mean(iv_clean) if len(iv_clean) > 0 else np.nan
 
 
-def fetch_option_chain(ticker: str, max_retries: int = 3) -> Tuple[str, Optional[str], Optional[object]]:
-    """Fetch nearest-expiry option chain with retry logic."""
-    for attempt in range(max_retries):
-        try:
-            tk = yf.Ticker(ticker)
-            expiry_dates = tk.options
-            
-            if not expiry_dates:
-                return ticker, None, None
-            
-            nearest_expiry = expiry_dates[0]
-            chain = tk.option_chain(nearest_expiry)
-            return ticker, nearest_expiry, chain
-            
-        except Exception:
-            if attempt == max_retries - 1:
-                pass 
-            continue
-    
-    return ticker, None, None
-
-
 def get_current_spot_price(ticker: str) -> float:
     """Retrieve current market price for ticker."""
     try:
@@ -145,6 +237,57 @@ def get_current_spot_price(ticker: str) -> float:
     except Exception:
         return np.nan
 
+
+# ============== OPTION CHAIN FETCHING ==============
+
+def fetch_option_chain(ticker: str, max_retries: int = 3) -> Tuple[str, Optional[str], Optional[object], Dict]:
+    """Fetch option chain with quality validation."""
+    for attempt in range(max_retries):
+        try:
+            tk = yf.Ticker(ticker)
+            expiry_dates = tk.options
+            
+            if not expiry_dates:
+                return ticker, None, None, {}
+            
+            # Use best expiry instead of nearest
+            best_expiry = get_best_expiry(expiry_dates)
+            if not best_expiry:
+                return ticker, None, None, {}
+            
+            chain = tk.option_chain(best_expiry)
+            
+            # Validate option data quality
+            spot_price = get_current_spot_price(ticker)
+            if np.isnan(spot_price):
+                return ticker, None, None, {}
+            
+            # Apply data quality filters
+            validated_puts = validate_option_data(chain.puts)
+            validated_calls = validate_option_data(chain.calls)
+            
+            # Check if we have enough data
+            if len(validated_puts) < 3 or len(validated_calls) < 3:
+                return ticker, None, None, {}
+            
+            # Create new chain with validated data
+            ValidatedChain = namedtuple('ValidatedChain', ['puts', 'calls'])
+            validated_chain = ValidatedChain(puts=validated_puts, calls=validated_calls)
+            
+            # Calculate quality metrics
+            quality_metrics = compute_data_quality_score(validated_puts, validated_calls, spot_price)
+            
+            return ticker, best_expiry, validated_chain, quality_metrics
+            
+        except Exception:
+            if attempt == max_retries - 1:
+                pass
+            continue
+    
+    return ticker, None, None, {}
+
+
+# ============== IV CALCULATION FUNCTIONS ==============
 
 def find_mean_iv_at_strike(
     options_df: pd.DataFrame, 
@@ -206,20 +349,7 @@ def find_mean_iv_at_strike(
 
 
 def get_otm_strike_targets(spot_price: float, chain: object) -> Tuple[float, float]:
-    """
-    Determine optimal OTM strike targets based on available strikes.
-    
-    For better bubble detection, we want strikes that are:
-    - Far enough OTM to show true demand (not hedging)
-    - Liquid enough to have reliable IV
-    
-    Args:
-        spot_price: Current stock price
-        chain: Option chain object
-        
-    Returns:
-        Tuple of (put_strike_target, call_strike_target)
-    """
+    """Determine optimal OTM strike targets based on available strikes."""
     try:
         puts_df = chain.puts
         calls_df = chain.calls
@@ -248,63 +378,12 @@ def get_otm_strike_targets(spot_price: float, chain: object) -> Tuple[float, flo
         return spot_price * OTM_PUT_BAND, spot_price * OTM_CALL_BAND
 
 
-def compute_iv_skew_metric(ticker: str, expiry: str, chain: object) -> Tuple[str, str, float, float, float]:
-    try:
-        calls_df = chain.calls
-        puts_df = chain.puts
-        
-        spot_price = get_current_spot_price(ticker)
-        
-        if np.isnan(spot_price):
-            return ticker, expiry, np.nan, np.nan, np.nan
-        
-        otm_put_strike, otm_call_strike = get_otm_strike_targets(spot_price, chain)
-        
-        mean_otm_put_iv = find_mean_iv_at_strike(
-            puts_df, 
-            otm_put_strike,
-            initial_window_pct=3.0, 
-            max_window_pct=15.0     
-        )
-        
-        mean_otm_call_iv = find_mean_iv_at_strike(
-            calls_df, 
-            otm_call_strike,
-            initial_window_pct=3.0,
-            max_window_pct=15.0
-        )
-        
-        if np.isnan(mean_otm_put_iv) or np.isnan(mean_otm_call_iv):
-            mean_otm_put_iv, mean_otm_call_iv = compute_volume_weighted_iv_skew(
-                puts_df, calls_df, spot_price
-            )
-        
-        iv_skew = mean_otm_put_iv - mean_otm_call_iv
-        
-        return ticker, expiry, mean_otm_put_iv, mean_otm_call_iv, iv_skew
-        
-    except Exception as e:
-        return ticker, expiry, np.nan, np.nan, np.nan
-
-
 def compute_volume_weighted_iv_skew(
     puts_df: pd.DataFrame, 
     calls_df: pd.DataFrame, 
     spot_price: float
 ) -> Tuple[float, float]:
-    """
-    Fallback method: Compute volume-weighted average IV for OTM options.
-    
-    This catches cases where strike-based method fails due to illiquid specific strikes.
-    
-    Args:
-        puts_df: Put options dataframe
-        calls_df: Call options dataframe
-        spot_price: Current stock price
-        
-    Returns:
-        Tuple of (weighted_put_iv, weighted_call_iv)
-    """
+    """Fallback: Compute volume-weighted average IV for OTM options."""
     try:
         otm_puts = puts_df[
             (puts_df["strike"] < spot_price * 0.98) &  
@@ -336,10 +415,51 @@ def compute_volume_weighted_iv_skew(
         return np.nan, np.nan
 
 
-#INDEX ANALYSIS
+def compute_iv_skew_metric(ticker: str, expiry: str, chain: object, quality_metrics: Dict) -> Tuple[str, str, float, float, float, float]:
+    """Calculate IV skew metric with quality score."""
+    try:
+        calls_df = chain.calls
+        puts_df = chain.puts
+        
+        spot_price = get_current_spot_price(ticker)
+        
+        if np.isnan(spot_price):
+            return ticker, expiry, np.nan, np.nan, np.nan, 0.0
+        
+        otm_put_strike, otm_call_strike = get_otm_strike_targets(spot_price, chain)
+        
+        mean_otm_put_iv = find_mean_iv_at_strike(
+            puts_df, 
+            otm_put_strike,
+            initial_window_pct=3.0, 
+            max_window_pct=15.0     
+        )
+        
+        mean_otm_call_iv = find_mean_iv_at_strike(
+            calls_df, 
+            otm_call_strike,
+            initial_window_pct=3.0,
+            max_window_pct=15.0
+        )
+        
+        if np.isnan(mean_otm_put_iv) or np.isnan(mean_otm_call_iv):
+            mean_otm_put_iv, mean_otm_call_iv = compute_volume_weighted_iv_skew(
+                puts_df, calls_df, spot_price
+            )
+        
+        iv_skew = mean_otm_put_iv - mean_otm_call_iv
+        quality_score = quality_metrics.get("quality_score", 0.0)
+        
+        return ticker, expiry, mean_otm_put_iv, mean_otm_call_iv, iv_skew, quality_score
+        
+    except Exception:
+        return ticker, expiry, np.nan, np.nan, np.nan, 0.0
+
+
+# ============== INDEX ANALYSIS ==============
 
 def analyze_index(index_key: str, index_data: Dict, n_workers: int = 5) -> pd.DataFrame:
-    """Analyze IV skew for a single index."""
+    """Analyze IV skew with quality tracking."""
     tickers = index_data["tickers"]
     results = []
     
@@ -350,19 +470,22 @@ def analyze_index(index_key: str, index_data: Dict, n_workers: int = 5) -> pd.Da
         }
         
         for future in as_completed(future_to_ticker):
-            ticker, expiry, chain = future.result()
+            ticker, expiry, chain, quality_metrics = future.result()
             
             if chain is None:
-                results.append((ticker, expiry, np.nan, np.nan, np.nan))
+                results.append((ticker, expiry, np.nan, np.nan, np.nan, 0.0))
                 continue
             
-            iv_skew_result = compute_iv_skew_metric(ticker, expiry, chain)
+            iv_skew_result = compute_iv_skew_metric(ticker, expiry, chain, quality_metrics)
             results.append(iv_skew_result)
     
     df = pd.DataFrame(
         results,
-        columns=["ticker", "expiry", "otm_put_iv", "otm_call_iv", "iv_skew"]
+        columns=["ticker", "expiry", "otm_put_iv", "otm_call_iv", "iv_skew", "quality_score"]
     )
+    
+    # Flag reliable data
+    df["is_reliable"] = df["quality_score"] >= 0.5
     
     df["index"] = index_key
     df["index_name"] = index_data["name"]
@@ -377,6 +500,9 @@ def print_index_summary(index_key: str, index_name: str, df: pd.DataFrame) -> No
     if len(valid_df) == 0:
         print(f"  ⚠️  No valid data")
         return
+    
+    # Show data quality
+    reliable_count = (valid_df["is_reliable"] == True).sum()
     
     inverted_count = (valid_df["iv_skew"] < 0).sum()
     inversion_pct = (inverted_count / len(valid_df)) * 100
@@ -394,21 +520,21 @@ def print_index_summary(index_key: str, index_name: str, df: pd.DataFrame) -> No
     else:
         status = "🟢"
     
-    print(f"  {status} Inverted: {inverted_count}/{len(valid_df)} ({inversion_pct:.1f}%) | Mean: {mean_skew:.4f} | Median: {median_skew:.4f}")
+    print(f"  {status} Inverted: {inverted_count}/{len(valid_df)} ({inversion_pct:.1f}%) | Mean: {mean_skew:.4f} | Median: {median_skew:.4f} | Quality: {reliable_count}/{len(valid_df)}")
 
 
 def print_detailed_skews(df: pd.DataFrame) -> None:
     """Print individual ticker skews in a formatted table."""
-    print("\n" + "="*100)
+    print("\n" + "="*110)
     print("DETAILED IV SKEW BY TICKER")
-    print("="*100)
+    print("="*110)
     
     for index_key in df["index"].unique():
         index_df = df[df["index"] == index_key].copy()
         index_name = index_df["index_name"].iloc[0]
         
         print(f"\n📊 {index_name} ({index_key})")
-        print("-" * 100)
+        print("-" * 110)
         
         index_df = index_df.sort_values("iv_skew")
         
@@ -417,6 +543,8 @@ def print_detailed_skews(df: pd.DataFrame) -> None:
             skew = row["iv_skew"]
             put_iv = row["otm_put_iv"]
             call_iv = row["otm_call_iv"]
+            quality = row["quality_score"]
+            reliable = "✓" if row["is_reliable"] else "✗"
             
             if pd.isna(skew):
                 status = "❌"
@@ -430,20 +558,22 @@ def print_detailed_skews(df: pd.DataFrame) -> None:
             
             put_str = f"{put_iv:.4f}" if not pd.isna(put_iv) else "N/A"
             call_str = f"{call_iv:.4f}" if not pd.isna(call_iv) else "N/A"
+            qual_str = f"{quality:.2f}" if not pd.isna(quality) else "N/A"
             
-            print(f"  {status} {ticker:12s} | Skew: {skew_str:>10s} | Put IV: {put_str:>8s} | Call IV: {call_str:>8s}")
+            print(f"  {status} {ticker:12s} | Skew: {skew_str:>10s} | Put: {put_str:>8s} | Call: {call_str:>8s} | Q: {qual_str:>4s} {reliable}")
 
 
-#Main Pipeline
+# ============== MAIN PIPELINE ==============
 
 def run_global_iv_skew_analysis(n_workers: int = 5, show_plot: bool = False) -> pd.DataFrame:
     """Run IV skew analysis across all global indices."""
     print("="*100)
-    print("GLOBAL IMPLIED VOLATILITY SKEW BUBBLE DETECTOR")
+    print("GLOBAL IMPLIED VOLATILITY SKEW BUBBLE DETECTOR (DATA VALIDATED)")
     print("="*100)
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Analyzing {len(GLOBAL_INDICES)} market segments with {sum(len(v['tickers']) for v in GLOBAL_INDICES.values())} tickers")
-    print("Note: Options data availability varies by market. US markets have the most complete data.\n")
+    print("Note: Options data availability varies by market. US markets have the most complete data.")
+    print(f"Data Quality Filters: Vol≥{MIN_VOLUME}, OI≥{MIN_OPEN_INTEREST}, {MIN_DTE}≤DTE≤{MAX_DTE}, {MIN_IV*100}%≤IV≤{MAX_IV*100}%\n")
     
     all_results = []
     
@@ -464,8 +594,10 @@ def run_global_iv_skew_analysis(n_workers: int = 5, show_plot: bool = False) -> 
     valid_df = df_combined.dropna(subset=["iv_skew"])
     total_attempted = len(df_combined)
     data_success_rate = (len(valid_df) / total_attempted * 100) if total_attempted > 0 else 0
+    reliable_count = (valid_df["is_reliable"] == True).sum()
     
     print(f"Data Retrieval: {len(valid_df)}/{total_attempted} successful ({data_success_rate:.1f}%)")
+    print(f"High Quality Data: {reliable_count}/{len(valid_df)} ({reliable_count/len(valid_df)*100:.1f}%)" if len(valid_df) > 0 else "High Quality Data: N/A")
     
     if len(valid_df) > 0:
         total_inverted = (valid_df["iv_skew"] < 0).sum()
@@ -495,9 +627,6 @@ def run_global_iv_skew_analysis(n_workers: int = 5, show_plot: bool = False) -> 
         elif global_inversion_pct > 25:
             print("\n🟠 CAUTION: Elevated Inversion Levels")
             print("   Inversion above historical norms but not yet critical.")
-        else:
-            print("\n🟢 NORMAL GLOBAL CONDITIONS")
-            print("   IV skew patterns appear healthy.")
     else:
         print("\n⚠️  Insufficient data to generate global summary.")
         print("   This may be due to market hours, API limitations, or data availability.")
