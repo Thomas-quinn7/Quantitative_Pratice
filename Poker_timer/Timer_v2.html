@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker Tournament Timer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: rgba(26, 26, 26, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a4d1a 0%, #2d5016 100%);
+            padding: 25px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid #FFD700;
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            letter-spacing: 2px;
+        }
+
+        .settings-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .settings-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .main-timer {
+            background: linear-gradient(135deg, #2d5016 0%, #1a4d1a 100%);
+            padding: 40px;
+            text-align: center;
+        }
+
+        .level-info {
+            font-size: 18px;
+            color: #cccccc;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .timer-display {
+            font-size: 96px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            margin: 20px 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-container {
+            background: rgba(0, 0, 0, 0.3);
+            height: 12px;
+            border-radius: 6px;
+            margin: 30px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #FFD700, #FFA500);
+            width: 0%;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .blinds-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .blind-card {
+            background: rgba(26, 77, 26, 0.8);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .blind-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(255, 215, 0, 0.2);
+        }
+
+        .blind-label {
+            font-size: 14px;
+            color: #cccccc;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .blind-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .control-btn {
+            background: linear-gradient(135deg, #28a745, #218838);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .control-btn.reset {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+        }
+
+        .next-level {
+            background: rgba(42, 42, 42, 0.95);
+            padding: 25px 40px;
+            border-top: 2px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .next-level-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #cccccc;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .next-blinds {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+
+        .next-blind-item {
+            text-align: center;
+        }
+
+        .next-blind-label {
+            font-size: 12px;
+            color: #888888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .next-blind-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #cccccc;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #2a2a2a;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #1a4d1a, #2d5016);
+            padding: 25px;
+            border-bottom: 3px solid #FFD700;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #FFD700;
+            text-align: center;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .level-edit {
+            background: rgba(26, 77, 26, 0.3);
+            border: 2px solid rgba(255, 215, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .level-edit-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #FFD700;
+            margin-bottom: 15px;
+        }
+
+        .level-fields {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .field-label {
+            font-size: 12px;
+            color: #cccccc;
+            margin-bottom: 5px;
+        }
+
+        .field-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            border-top: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .modal-btn.save {
+            background: linear-gradient(135deg, #28a745, #218838);
+            color: white;
+        }
+
+        .modal-btn.cancel {
+            background: #6c757d;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .timer-display {
+                font-size: 64px;
+            }
+            .blinds-container {
+                grid-template-columns: 1fr;
+            }
+            .level-fields {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">♠ POKER TOURNAMENT ♣</div>
+            <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+        </div>
+
+        <div class="main-timer">
+            <div class="level-info" id="levelInfo">Level 1 of 13</div>
+            <div class="timer-display" id="timerDisplay">20:00</div>
+            
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="blinds-container">
+                <div class="blind-card">
+                    <div class="blind-label">Small Blind</div>
+                    <div class="blind-value" id="smallBlind">100</div>
+                </div>
+                <div class="blind-card">
+                    <div class="blind-label">Big Blind</div>
+                    <div class="blind-value" id="bigBlind">200</div>
+                </div>
+                <div class="blind-card">
+                    <div class="blind-label">Ante</div>
+                    <div class="blind-value" id="ante">-</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button class="control-btn" id="startBtn" onclick="toggleTimer()">▶ Start</button>
+                <button class="control-btn reset" onclick="resetTimer()">↻ Reset</button>
+            </div>
+        </div>
+
+        <div class="next-level">
+            <div class="next-level-title">Next Level</div>
+            <div class="next-blinds">
+                <div class="next-blind-item">
+                    <div class="next-blind-label">Small</div>
+                    <div class="next-blind-value" id="nextSmall">200</div>
+                </div>
+                <div class="next-blind-item">
+                    <div class="next-blind-label">Big</div>
+                    <div class="next-blind-value" id="nextBig">400</div>
+                </div>
+                <div class="next-blind-item">
+                    <div class="next-blind-label">Ante</div>
+                    <div class="next-blind-value" id="nextAnte">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Blind Structure Settings</div>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="modal-btn save" onclick="saveSettings()">💾 Save Changes</button>
+                <button class="modal-btn cancel" onclick="closeSettings()">✕ Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let levels = [
+            {small_blind: 100, big_blind: 200, ante: 0, duration: 20},
+            {small_blind: 200, big_blind: 400, ante: 0, duration: 15},
+            {small_blind: 300, big_blind: 600, ante: 0, duration: 15},
+            {small_blind: 500, big_blind: 1000, ante: 0, duration: 15},
+            {small_blind: 1000, big_blind: 2000, ante: 0, duration: 20},
+            {small_blind: 2000, big_blind: 4000, ante: 0, duration: 20},
+            {small_blind: 3000, big_blind: 6000, ante: 0, duration: 20},
+            {small_blind: 5000, big_blind: 10000, ante: 0, duration: 20},
+            {small_blind: 10000, big_blind: 20000, ante: 0, duration: 20},
+            {small_blind: 20000, big_blind: 40000, ante: 0, duration: 20},
+            {small_blind: 40000, big_blind: 80000, ante: 0, duration: 20},
+            {small_blind: 70000, big_blind: 150000, ante: 0, duration: 20},
+            {small_blind: 100000, big_blind: 200000, ante: 0, duration: 20}
+        ];
+
+        let currentLevel = 0;
+        let timeLeft = levels[0].duration * 60;
+        let isRunning = false;
+        let intervalId = null;
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function formatChips(value) {
+            if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+            if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
+            return value.toString();
+        }
+
+        function updateDisplay() {
+            const current = levels[currentLevel];
+            
+            document.getElementById('levelInfo').textContent = `Level ${currentLevel + 1} of ${levels.length}`;
+            document.getElementById('timerDisplay').textContent = formatTime(timeLeft);
+            
+            const totalTime = current.duration * 60;
+            const elapsed = totalTime - timeLeft;
+            const progress = (elapsed / totalTime) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+            
+            document.getElementById('smallBlind').textContent = formatChips(current.small_blind);
+            document.getElementById('bigBlind').textContent = formatChips(current.big_blind);
+            document.getElementById('ante').textContent = current.ante > 0 ? formatChips(current.ante) : '-';
+            
+            if (currentLevel < levels.length - 1) {
+                const next = levels[currentLevel + 1];
+                document.getElementById('nextSmall').textContent = formatChips(next.small_blind);
+                document.getElementById('nextBig').textContent = formatChips(next.big_blind);
+                document.getElementById('nextAnte').textContent = next.ante > 0 ? formatChips(next.ante) : '-';
+            } else {
+                document.getElementById('nextSmall').textContent = 'Final';
+                document.getElementById('nextBig').textContent = 'Level';
+                document.getElementById('nextAnte').textContent = '';
+            }
+        }
+
+        function toggleTimer() {
+            isRunning = !isRunning;
+            const btn = document.getElementById('startBtn');
+            
+            if (isRunning) {
+                btn.textContent = '⏸ Pause';
+                tick();
+            } else {
+                btn.textContent = '▶ Start';
+                if (intervalId) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+            }
+        }
+
+        function tick() {
+            if (intervalId) clearInterval(intervalId);
+            
+            intervalId = setInterval(() => {
+                if (!isRunning) {
+                    clearInterval(intervalId);
+                    return;
+                }
+                
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    updateDisplay();
+                } else {
+                    if (currentLevel < levels.length - 1) {
+                        currentLevel++;
+                        timeLeft = levels[currentLevel].duration * 60;
+                        playAlarm();
+                        updateDisplay();
+                    } else {
+                        isRunning = false;
+                        clearInterval(intervalId);
+                        document.getElementById('startBtn').textContent = '▶ Start';
+                        alert('Tournament Complete! All levels finished.');
+                    }
+                }
+            }, 1000);
+        }
+
+        function playAlarm() {
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUKnh8bllHQU2mdvy0n0qBSl+zPDdkT8JFGC16+uoVRUJRqDh8r9uHwUpgs/y2ok2Bxxqvev');
+        }
+
+        function resetTimer() {
+            isRunning = false;
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+            currentLevel = 0;
+            timeLeft = levels[0].duration * 60;
+            document.getElementById('startBtn').textContent = '▶ Start';
+            updateDisplay();
+        }
+
+        function openSettings() {
+            const modal = document.getElementById('settingsModal');
+            const modalBody = document.getElementById('modalBody');
+            
+            modalBody.innerHTML = '';
+            
+            levels.forEach((level, i) => {
+                const div = document.createElement('div');
+                div.className = 'level-edit';
+                div.innerHTML = `
+                    <div class="level-edit-title">Level ${i + 1}</div>
+                    <div class="level-fields">
+                        <div class="field-group">
+                            <label class="field-label">Small Blind</label>
+                            <input type="number" class="field-input" data-level="${i}" data-field="small_blind" value="${level.small_blind}">
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Big Blind</label>
+                            <input type="number" class="field-input" data-level="${i}" data-field="big_blind" value="${level.big_blind}">
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Ante</label>
+                            <input type="number" class="field-input" data-level="${i}" data-field="ante" value="${level.ante}">
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Duration (min)</label>
+                            <input type="number" class="field-input" data-level="${i}" data-field="duration" value="${level.duration}">
+                        </div>
+                    </div>
+                `;
+                modalBody.appendChild(div);
+            });
+            
+            modal.classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        function saveSettings() {
+            const inputs = document.querySelectorAll('.field-input');
+            const newLevels = [];
+            
+            for (let i = 0; i < levels.length; i++) {
+                newLevels.push({
+                    small_blind: 0,
+                    big_blind: 0,
+                    ante: 0,
+                    duration: 0
+                });
+            }
+            
+            inputs.forEach(input => {
+                const levelIndex = parseInt(input.dataset.level);
+                const field = input.dataset.field;
+                const value = parseInt(input.value) || 0;
+                newLevels[levelIndex][field] = value;
+            });
+            
+            levels = newLevels;
+            
+            if (isRunning) {
+                isRunning = false;
+                if (intervalId) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+            }
+            
+            currentLevel = 0;
+            timeLeft = levels[0].duration * 60;
+            document.getElementById('startBtn').textContent = '▶ Start';
+            updateDisplay();
+            
+            closeSettings();
+            alert('Blind structure updated successfully!');
+        }
+
+        updateDisplay();
+    </script>
+</body>
+</html>
