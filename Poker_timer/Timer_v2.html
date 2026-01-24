@@ -229,8 +229,8 @@
             background: #2a2a2a;
             border-radius: 15px;
             width: 100%;
-            max-width: 700px;
-            max-height: 80vh;
+            max-width: 900px;
+            max-height: 85vh;
             overflow-y: auto;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
@@ -271,6 +271,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 15px;
+            align-items: end;
         }
 
         .field-group {
@@ -291,6 +292,58 @@
             padding: 8px;
             border-radius: 5px;
             font-size: 14px;
+        }
+
+        .level-jump {
+            background: rgba(42, 42, 42, 0.8);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .level-jump-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #FFD700;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .level-jump-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .level-jump-btn {
+            background: rgba(255, 215, 0, 0.2);
+            border: 1px solid rgba(255, 215, 0, 0.5);
+            color: #FFD700;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .level-jump-btn:hover {
+            background: rgba(255, 215, 0, 0.3);
+        }
+
+        .level-jump-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .level-jump-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            min-width: 100px;
+            text-align: center;
         }
 
         .modal-footer {
@@ -330,6 +383,9 @@
             }
             .level-fields {
                 grid-template-columns: repeat(2, 1fr);
+            }
+            .modal-content {
+                max-width: 95%;
             }
         }
     </style>
@@ -529,6 +585,22 @@
             
             modalBody.innerHTML = '';
             
+            // Add level jump controls
+            const levelJumpDiv = document.createElement('div');
+            levelJumpDiv.className = 'level-jump';
+            levelJumpDiv.innerHTML = `
+                <div class="level-jump-title">Jump to Level</div>
+                <div class="level-jump-controls">
+                    <button class="level-jump-btn" onclick="event.preventDefault(); adjustLevel(-1)">◀</button>
+                    <div class="level-jump-display" id="levelJumpDisplay">Level ${currentLevel + 1}</div>
+                    <button class="level-jump-btn" onclick="event.preventDefault(); adjustLevel(1)">▶</button>
+                </div>
+            `;
+            modalBody.appendChild(levelJumpDiv);
+            
+            // Update button states after adding to DOM
+            updateLevelJumpButtons();
+            
             levels.forEach((level, i) => {
                 const div = document.createElement('div');
                 div.className = 'level-edit';
@@ -585,21 +657,57 @@
             
             levels = newLevels;
             
-            if (isRunning) {
-                isRunning = false;
-                if (intervalId) {
-                    clearInterval(intervalId);
-                    intervalId = null;
-                }
+            // Don't reset the level - keep current position
+            // Only reset the time for the current level
+            if (currentLevel < levels.length) {
+                timeLeft = levels[currentLevel].duration * 60;
             }
             
-            currentLevel = 0;
-            timeLeft = levels[0].duration * 60;
-            document.getElementById('startBtn').textContent = '▶ Start';
             updateDisplay();
             
             closeSettings();
             alert('Blind structure updated successfully!');
+        }
+
+        function adjustLevel(direction) {
+            const newLevel = currentLevel + direction;
+            
+            if (newLevel >= 0 && newLevel < levels.length) {
+                // Pause the timer if it's running
+                if (isRunning) {
+                    isRunning = false;
+                    if (intervalId) {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
+                    document.getElementById('startBtn').textContent = '▶ Start';
+                }
+                
+                currentLevel = newLevel;
+                timeLeft = levels[currentLevel].duration * 60;
+                
+                // Update the display in the modal
+                const displayEl = document.getElementById('levelJumpDisplay');
+                if (displayEl) {
+                    displayEl.textContent = `Level ${currentLevel + 1}`;
+                }
+                
+                // Update button states
+                updateLevelJumpButtons();
+                
+                // Update the main timer display
+                updateDisplay();
+            }
+        }
+
+        function updateLevelJumpButtons() {
+            const prevBtn = document.querySelector('.level-jump-controls button:first-child');
+            const nextBtn = document.querySelector('.level-jump-controls button:last-child');
+            
+            if (prevBtn && nextBtn) {
+                prevBtn.disabled = currentLevel === 0;
+                nextBtn.disabled = currentLevel === levels.length - 1;
+            }
         }
 
         updateDisplay();
