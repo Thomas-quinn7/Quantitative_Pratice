@@ -11,7 +11,7 @@ import pandas as pd
 # Support both package execution (python -m Pairs_trading_tools.main)
 # and direct script execution (python Pairs_trading_tools/main.py)
 try:
-    from .pair_trader_v2_test import (
+    from .pair_trader import (
         data_fetcher,
         heatmap,
         coint_tester,
@@ -22,7 +22,7 @@ except Exception:  # pragma: no cover - fallback for direct script run
     ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     if ROOT not in sys.path:
         sys.path.insert(0, ROOT)
-    from Pairs_trading_tools.pair_trader_v2_test import (  # type: ignore
+    from Pairs_trading_tools.pair_trader import (  # type: ignore
         data_fetcher,
         heatmap,
         coint_tester,
