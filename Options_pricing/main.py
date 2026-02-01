@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
-from black import (black_scholes, greeks, diff_function, implied_volatility,
+from Options_pricing.black import (black_scholes, greeks, diff_function, implied_volatility,
                    black_scholes_vectorized, greeks_vectorized,
                    black_scholes_batch_strikes, greeks_batch_strikes,
                    price_heatmap,skew_surface)
@@ -124,7 +124,7 @@ def performance_test():
     print("Running performance test...")
 
     import time
-    from black import black_scholes_batch_strikes, greeks_batch_strikes
+    from Options_pricing.black import black_scholes_batch_strikes, greeks_batch_strikes
 
     S, K, T, r, sigma = 100, 105, 0.25, 0.05, 0.2
 
