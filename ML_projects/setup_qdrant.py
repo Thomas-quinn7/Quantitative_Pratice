@@ -1,3 +1,4 @@
+from xmlrpc import client
 import qdrant_client as qdrant_module
 from qdrant_client.models import Distance, VectorParams, PointStruct
 import pandas as pd
@@ -63,14 +64,59 @@ def setup_qdrant_database(force_recreate=False):
         print(f"Error creating collection: {e}")
         return None
     
-    # TODO: Add your data processing and insertion logic here
-    # For now, just create empty collection
-    print("📝 TODO: Add data insertion logic")
-    print("   - Process crypto_df into vectors")
-    print("   - Insert points into collection")
+    print("📊 Processing crypto data...")
+
+# Select relevant features for vector creation
+feature_columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'Market_Cap']
+available_features = [col for col in feature_columns if col in crypto_df.columns]
+
+# Create vectors from numerical features
+vectors = []
+points = []
+
+for idx, row in crypto_df.iterrows():
+    # Extract features and normalize
+    feature_values = [row[col] for col in available_features if pd.notna(row[col])]
     
-    print("✅ Qdrant database initialized successfully")
-    return client
+    # Pad or truncate to 128 dimensions
+    vector = np.zeros(128)
+    vector[:len(feature_values)] = feature_values[:128]
+    
+    # Normalize the vector
+    norm = np.linalg.norm(vector)
+    if norm > 0:
+        vector = vector / norm
+    
+    # Create point with payload
+    point = PointStruct(
+        id=idx,
+        vector=vector.tolist(),
+        payload={
+            "symbol": str(row.get('Symbol', '')),
+            "date": str(row.get('Date', '')),
+            "close": float(row.get('Close', 0)),
+            "volume": float(row.get('Volume', 0)),
+            "market_cap": float(row.get('Market_Cap', 0))
+            }
+        )
+    points.append(point)
+    
+    # Batch insert every 100 points
+    if len(points) >= 100:
+        client.upsert(collection_name="crypto_data", points=points)
+        print(f"   Inserted {idx + 1} points...")
+        points = []
+
+# Insert remaining points
+    if points:
+        client.upsert(collection_name="crypto_data", points=points)
+        print(f"✅ Inserted {len(crypto_df)} crypto data points")
+        print("📝 TODO: Add data insertion logic")
+        print("   - Process crypto_df into vectors")
+        print("   - Insert points into collection")
+    
+        print("✅ Qdrant database initialized successfully")
+        return client
 
 def check_qdrant_status():
     """Check current status of Qdrant database"""
